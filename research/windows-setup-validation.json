@@ -1,0 +1,35 @@
+{
+  "tests": [
+    {
+      "name": "missing_wsl",
+      "passed": true,
+      "mode": "mocked"
+    },
+    {
+      "name": "no_distro_check",
+      "passed": true,
+      "mode": "mocked"
+    },
+    {
+      "name": "install_needs_reboot",
+      "passed": true,
+      "mode": "mocked"
+    },
+    {
+      "name": "install_failed",
+      "passed": true,
+      "mode": "mocked"
+    },
+    {
+      "name": "uac_denied",
+      "passed": true,
+      "mode": "mocked"
+    },
+    {
+      "name": "actual_cmd_to_wsl_launch_and_exit",
+      "passed": true,
+      "mode": "live"
+    }
+  ],
+  "fresh_wsl_install_tested": false
+}

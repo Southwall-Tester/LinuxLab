@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+research/playurl-local.json
+
+# Generated handouts and local verification output
+dist/
+research/windows-launch-test.txt
+
+# Learner data and local-only files
+.local/
+sessions/
+checkpoints/
+recovery/
+state.json
+current.json
+history
+.bash_history
+.env
+.env.*
+!.env.example
+*.log
+*.tmp

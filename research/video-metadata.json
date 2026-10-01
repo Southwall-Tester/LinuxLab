@@ -1,0 +1,123 @@
+{
+  "bvid": "BV1GwMEzVEbQ",
+  "title": "2025新手必学的11个Linux命令，轻松应对80%测试场景! Linux系统|Linux命令|Linux学习路线",
+  "duration": 3293,
+  "pages": [
+    {
+      "cid": 30435443112,
+      "page": 1,
+      "from": "vupload",
+      "part": "01：cd命令和mkdir命令常见用法",
+      "duration": 492,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i2.hdslb.com/bfs/storyff/n250611sa252eaqb203saq28e0p2jofa_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443298,
+      "page": 2,
+      "from": "vupload",
+      "part": "02：ls命令和cp命令常见用法(1)",
+      "duration": 878,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i1.hdslb.com/bfs/storyff/n250611saeqfkhabgpkjsiixg6svhpfq_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443665,
+      "page": 3,
+      "from": "vupload",
+      "part": "03：mv、rm、tar命令常见用法(1)",
+      "duration": 415,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i0.hdslb.com/bfs/storyff/n250611sa1k11liucppo8y2qqo1g5iev_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443708,
+      "page": 4,
+      "from": "vupload",
+      "part": "04：cat命令和tail命令常见用法(1)",
+      "duration": 440,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1032,
+        "rotate": 0
+      },
+      "first_frame": "http://i2.hdslb.com/bfs/storyff/n250611sa1ak74gmjlvjvx29gv1ejxra_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443826,
+      "page": 5,
+      "from": "vupload",
+      "part": "05：vim文本编辑器基本用法",
+      "duration": 345,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i0.hdslb.com/bfs/storyff/n250611sa1h18mwdozs9kn2fmvwgi2cd_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443787,
+      "page": 6,
+      "from": "vupload",
+      "part": "06：文件权限管理",
+      "duration": 377,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i1.hdslb.com/bfs/storyff/n250611samcojrjlcet6e1c0x6y634wt_firsti.jpg",
+      "ctime": 1749625567
+    },
+    {
+      "cid": 30435443931,
+      "page": 7,
+      "from": "vupload",
+      "part": "07：性能监控和压力测试",
+      "duration": 346,
+      "vid": "",
+      "weblink": "",
+      "dimension": {
+        "width": 1920,
+        "height": 1038,
+        "rotate": 0
+      },
+      "first_frame": "http://i2.hdslb.com/bfs/storyff/n250611samx2zeb16kl4lv15lmnmd1ok_firsti.jpg",
+      "ctime": 1749625567
+    }
+  ],
+  "subtitle": {
+    "allow_submit": false,
+    "list": []
+  }
+}
