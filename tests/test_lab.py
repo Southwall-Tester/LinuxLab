@@ -243,9 +243,27 @@ class LabTest(unittest.TestCase):
         self.assertEqual((self.root / 'AGENTS.md').read_text(), expected)
         self.assertTrue((self.root / 'STUDENT.md').is_file())
         (self.root / 'AGENTS.md').write_text('outdated copy')
+        (self.root / 'notes.md').unlink()  # an older session has no notes copy
         subprocess.run([sys.executable, str(APP / 'orbit.py'), 'prepare'], env=self.env,
                        capture_output=True, text=True, check=True)
         self.assertEqual((self.root / 'AGENTS.md').read_text(), expected)
+        self.assertEqual((self.root / 'notes.md').read_bytes(), (APP / 'notes.md').read_bytes())
+
+    def test_notes_available_anywhere_without_progress_changes(self):
+        before = self.state()
+        self.assertEqual((self.root / 'notes.md').read_bytes(), (APP / 'notes.md').read_bytes())
+        index = self.cli('notes', cwd=self.root / 'airlock')
+        self.assertIn('lab notes ls', index)
+        self.assertIn('notes.md', index)
+        section = self.cli('notes', 'ls', cwd=self.root / 'work')
+        self.assertIn('human-readable', section)
+        self.assertNotIn('## grep', section)
+        for topic in ['cd', 'pwd']:
+            self.assertIn('change directory', self.cli('notes', topic))
+        self.assertIn('## glob', self.cli('notes', '*'))
+        self.assertEqual(self.cli('notes', 'all').rstrip(), (APP / 'notes.md').read_text().rstrip())
+        self.cli('notes', '../state.json', ok=False)
+        self.assertEqual(self.state(), before)
 
     def test_real_interactive_launcher_vim_and_resume(self):
         master, slave = pty.openpty()

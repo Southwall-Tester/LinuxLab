@@ -22,6 +22,7 @@ bash start.sh
 ```text
 lab                 当前任务
 lab learn           本关命令速查
+lab notes [命令]    学习命令名和常用参数；例如 lab notes ls
 lab hint            逐级提示，最多三级，不扣分
 lab check [答案]    检查成果；只有指定关卡需要答案
 lab repair          备份现场，恢复到本关起点
@@ -59,6 +60,7 @@ exit                退出，下次启动继续
 ## 教学依据与交付文件
 
 - [学生手册](STUDENT.md)：操作规则、常见问题、命令速查。
+- [Linux 命令参数笔记](notes.md)：命令名的英文来源，以及“参数、英文原词、作用说明、记忆联想”四列表；覆盖实验命令和常用拓展工具。实验内用 `lab notes` 查目录、`lab notes ls` 查单个命令，按需学习即可。
 - [环境与安装](docs/SETUP.md)：首次安装、双击入口、所需软件与故障处理。
 - [AI 助教约定](AGENTS.md)与[使用说明](docs/AI-TUTOR.md)：允许讲解和排错，学生自己操作与提交。
 - [设计与教师说明](docs/DESIGN.md)：视频分集映射、教学节奏、验收和局限。

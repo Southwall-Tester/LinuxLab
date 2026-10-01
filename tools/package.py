@@ -6,7 +6,7 @@ import tarfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-FILES = ['README.md', 'STUDENT.md', 'AGENTS.md', 'VALIDATION.md',
+FILES = ['README.md', 'STUDENT.md', 'notes.md', 'AGENTS.md', 'VALIDATION.md',
          'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'orbit.py', 'lessons.py',
          '启动实验.cmd', '安装环境.cmd', '检查环境.cmd',
          'docs/SETUP.md', 'docs/AI-TUTOR.md', 'docs/DESIGN.md', 'research/SOURCES.md',

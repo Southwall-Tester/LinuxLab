@@ -205,7 +205,7 @@ def generate_final(root, s):
 
 
 def sync_guides(root):
-    for name in ['AGENTS.md', 'STUDENT.md']:
+    for name in ['AGENTS.md', 'STUDENT.md', 'notes.md']:
         source = APP / name
         if source.is_file():
             write(root, name, source.read_text(encoding='utf-8'))
@@ -527,6 +527,28 @@ def repair(session, s):
     print('已恢复到本关开始时。请立即输入 cd "$(lab root)" 回到新现场，然后 lab。')
 
 
+def show_notes(topic):
+    path = APP / 'notes.md'
+    text = path.read_text(encoding='utf-8')
+    sections = {}
+    for part in text.split('\n## ')[1:]:
+        title = part.split('\n', 1)[0]
+        sections[title.split()[0]] = (title, '## ' + part.rstrip())
+    topic = {'cd': 'navigation', 'pwd': 'navigation', '*': 'glob'}.get(topic, topic)
+    if topic == 'all':
+        print(text)
+    elif topic:
+        require(topic in sections, '没有这个笔记主题；输入 lab notes 查看目录。')
+        print(sections[topic][1])
+    else:
+        print('Linux 常用命令参数笔记（notes.md）')
+        print('先认识命令名，再查“参数 / 英文原词 / 作用说明 / 记忆联想”。\n')
+        for key, (title, _) in sections.items():
+            print('  lab notes ' + key + '  —  ' + title.partition(' — ')[2])
+        print('\n例如 lab notes ls；lab notes cd 或 lab notes pwd 可查目录操作。')
+        print('lab notes all 显示全文；笔记文件：' + str(path))
+
+
 def run_command(args, session, s):
     cmd = args.command
     n = len(s['done']) + 1
@@ -535,11 +557,13 @@ def run_command(args, session, s):
         if cmd == 'mission':
             if n <= 9:
                 print('本关工具：' + SKILLS[n-1] + '\n\n' + brief(n, s))
-                print('\n提示：lab learn 查看用法；lab hint 逐级求助。')
+                print('\n提示：lab learn 查看用法；lab hint 逐级求助；lab notes 查看命令参数笔记。')
             else:
                 ending(session, s)
     elif cmd == 'help':
         print(HELP)
+    elif cmd == 'notes':
+        show_notes(args.topic)
     elif cmd == 'root':
         print(session / 'station')
     elif cmd == 'check':
@@ -551,8 +575,9 @@ def run_command(args, session, s):
         s['hints'][key] = max(s['hints'].get(key, 0), level)
         print(f'提示 {level}/3（不扣分）：\n' + HINTS[n-1][level-1])
     elif cmd == 'learn':
-        require(n <= 9, '已经通关，命令速查也在 STUDENT.md 中。')
+        require(n <= 9, '已经通关，可用 lab notes 查命令笔记，或阅读 STUDENT.md。')
         print(CARDS[n-1])
+        print('\n更多常用参数及命令名含义：lab notes（例如 lab notes ls），也可阅读 notes.md。')
     elif cmd == 'load':
         require(n == 8, '遥测探针在第八关开放。')
         start_worker(session, s)
@@ -585,6 +610,7 @@ def main():
         sub.add_parser(name)
     p = sub.add_parser('check'); p.add_argument('answer', nargs='?', default='')
     p = sub.add_parser('hint'); p.add_argument('level', nargs='?', type=int, choices=[1, 2, 3])
+    p = sub.add_parser('notes'); p.add_argument('topic', nargs='?', default='')
     p = sub.add_parser('stop'); p.add_argument('--quiet', action='store_true')
     args = parser.parse_args()
     args.command = args.command or 'mission'

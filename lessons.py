@@ -210,6 +210,7 @@ HELP = '''lab                  查看当前任务和进度
 lab check [答案]     检查当前关；失败会指出具体缺项，可以重试
 lab hint [1|2|3]    逐级提示：方向 → 方法 → 命令骨架（每关单独记录）
 lab learn           当前关的命令速查
+lab notes [命令]    命令名与参数笔记目录；例如 lab notes ls；all 查看全文
 lab status          查看九个系统和通关记录
 lab root            显示站点根目录；迷路可用 cd "$(lab root)"
 lab load            第八关启动一个限时练习进程
