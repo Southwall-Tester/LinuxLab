@@ -17,7 +17,7 @@ SOURCES = {'AGENTS.md': 'docs/STUDENT-AGENTS.md'}
 def main():
     target = ROOT / 'dist'
     target.mkdir(exist_ok=True)
-    package = target / 'ORBIT-Linux实验-学生版-Linux-WSL.tar.gz'
+    package = target / 'orbit-lab-student-linux-wsl.tar.gz'
     hashes = {}
     with tarfile.open(package, 'w:gz', format=tarfile.PAX_FORMAT) as tar:
         for name in FILES:
@@ -30,7 +30,7 @@ def main():
             info.mode = 0o755 if name.endswith('.sh') else 0o644
             with p.open('rb') as f:
                 tar.addfile(info, f)
-    windows_package = target / 'ORBIT-Linux实验-学生版-Windows.zip'
+    windows_package = target / 'orbit-lab-student-windows.zip'
     with zipfile.ZipFile(windows_package, 'w', zipfile.ZIP_DEFLATED) as z:
         for name in FILES:
             z.write(ROOT / SOURCES.get(name, name), 'orbit-lab/' + name)

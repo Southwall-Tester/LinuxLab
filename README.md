@@ -66,8 +66,8 @@ exit                退出，下次启动继续
 - [设计与教师说明](docs/DESIGN.md)：视频分集映射、教学节奏、验收和局限。
 - [来源核对](research/SOURCES.md)：已核实的内容与尚未核实的范围。
 - [验证记录](VALIDATION.md)：本机 WSL 的实际验证结果。
-- `dist/ORBIT-Linux实验-学生版-Windows.zip`：Windows 用户下载，解压后可双击安装/启动。
-- `dist/ORBIT-Linux实验-学生版-Linux-WSL.tar.gz`：Linux / WSL 用户下载；两者均不含测试通关流程。
+- **Windows 学生版**：`dist/orbit-lab-student-windows.zip`，解压后可双击安装/启动。
+- **Linux / WSL 学生版**：`dist/orbit-lab-student-linux-wsl.tar.gz`；两者均不含测试通关流程，按使用环境选一个即可。
 
 `dist/` 是本地生成目录，不随源码提交。维护者在完整源码仓库中进入 WSL/Linux，运行 `python3 tools/package.py` 构建以上学生包，再运行 `python3 tools/verify_handout.py` 验证；发布时把学生包上传为 GitHub Release 附件。普通学生无需执行构建命令。
 
