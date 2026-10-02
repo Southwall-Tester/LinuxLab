@@ -56,6 +56,8 @@ ls
 | 权限 | `chmod 700 script`、`chmod 600 config` | 用 `ls -l` 核对；不需要 sudo |
 | 进程 | `top`、`top -b -n 1` | q 退出；PID 不等于 CPU 百分比 |
 
+**写目录的小习惯**：把普通文件移进或复制进已有目录时，目标末尾加 `/`，如 `mv note.txt notes/`、`cp note.txt notes/`。目标不存在或不是目录会报错，避免把目录名误当新文件名；有意改名则写完整的新文件名，不加 `/`。这不会自动建目录，也不能防止选错另一个已有目录或覆盖其中的同名文件。对比例子见 `lab notes mv`。
+
 ## 参数怎么记，为什么需要它
 
 参数让你按需选择行为。比如 `tail -n 5 app.log` 中，`-n` 是选项，`5` 是行数，`app.log` 是文件名。短选项常能合写：`ls -la` 是 `-l` 和 `-a`；`tar -tzf pack.tar.gz` 是 `-t`、`-z`、`-f pack.tar.gz`。大小写有区别。

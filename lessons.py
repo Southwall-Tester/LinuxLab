@@ -3,6 +3,7 @@
 # A single wording source for terminal hints, command cards and feedback.
 # Mnemonics are explicitly distinguished from actual long-option names.
 OPTION_HELP = {
+    'dest-dir': '好习惯：把普通文件放进已有目录时，目标末尾写 /，如 mv file.txt notes/。若 notes 不存在或不是目录，就会报错，避免意外改名；有意改名则写完整文件名，不加 /。它不会创建目录，也不能发现选错了另一个已有目录。',
     'glob-star': '* 是通配符，不是命令参数或英文缩写：匹配同一层文件名中的零个或多个字符，方便按共同规律批量选文件。Bash 先把未加引号的模式展开成文件名，再交给命令；默认不匹配名称开头的点号，也不跨越 /。',
     'glob-preview': '例如先用 ls notes/note-*.txt 查看匹配范围，核对后再用同一模式操作。给整个模式加引号会阻止展开；默认没有匹配时，Bash 会把模式原样传给命令，出现“不存在”时先检查目录和拼写。',
     'mkdir-p': 'mkdir -p：p = parents（父级目录），补齐缺少的父目录，已存在也可继续。默认报错有助于发现路径写错；加 -p 才自动补齐，也可以自己逐层创建。',
@@ -189,14 +190,14 @@ HINT_OPTION_KEYS = [
      ('tar-x', 'tar-z', 'tar-f', 'tar-C', 'tail-n', 'chmod-mode', 'tar-c', 'tar-t')],
 ]
 CARD_OPTION_KEYS = [
-    ('ls-a', 'ls-l', 'mkdir-p'), ('cp-a',), ('glob-star', 'glob-preview', 'rm-i', 'rm-r', 'rm-f'),
+    ('ls-a', 'ls-l', 'mkdir-p'), ('cp-a',), ('dest-dir', 'glob-star', 'glob-preview', 'rm-i', 'rm-r', 'rm-f'),
     ('tar-t', 'tar-x', 'tar-c', 'tar-z', 'tar-f', 'tar-C'),
     ('tail-n', 'tail-f'), ('vim-edit', 'vim-quit', 'vim-undo'),
     ('chmod-mode', 'ls-l'), ('top-keys', 'top-b', 'top-n'),
     ('tar-t', 'tar-v', 'tar-z', 'tar-f'),
 ]
 REFLECTION_OPTION_KEYS = [
-    ('ls-a', 'mkdir-p'), ('cp-r', 'cp-a'), ('glob-star', 'glob-preview', 'rm-i'), ('tar-t', 'tar-x', 'tar-C'),
+    ('ls-a', 'mkdir-p'), ('cp-r', 'cp-a'), ('dest-dir', 'glob-star', 'glob-preview', 'rm-i'), ('tar-t', 'tar-x', 'tar-C'),
     ('tail-n',), ('vim-edit',), ('chmod-mode',), ('top-keys',),
     ('tar-t', 'tar-v', 'tar-z', 'tar-f'),
 ]
