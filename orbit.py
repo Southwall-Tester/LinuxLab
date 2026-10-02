@@ -22,7 +22,7 @@ from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
                           unknown_topic, shell_lookup_error, runtime_error)
 
 APP = Path(__file__).resolve().parent
-VERSION = '1.0.0'
+VERSION = '1.0.1'
 MARKER = 'orbit-linux-lab-v1'
 
 
@@ -207,7 +207,9 @@ def generate_final(root, s):
 
 
 def sync_guides(root):
-    for name in ['AGENTS.md', 'STUDENT.md', 'notes.md']:
+    # Never copy the repository's maintainer instructions into a learner session.
+    write(root, 'AGENTS.md', (APP / 'docs/STUDENT-AGENTS.md').read_text(encoding='utf-8'))
+    for name in ['STUDENT.md', 'notes.md']:
         source = APP / name
         if source.is_file():
             write(root, name, source.read_text(encoding='utf-8'))

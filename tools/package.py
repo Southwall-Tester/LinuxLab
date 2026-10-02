@@ -9,8 +9,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = ['README.md', 'STUDENT.md', 'notes.md', 'AGENTS.md', 'VALIDATION.md',
          'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'orbit.py', 'lessons.py', 'terminal_notes.py', 'cli_messages.py',
          '启动实验.cmd', '安装环境.cmd', '检查环境.cmd',
-         'docs/SETUP.md', 'docs/AI-TUTOR.md', 'docs/DESIGN.md', 'research/SOURCES.md',
+         'docs/SETUP.md', 'docs/AI-TUTOR.md', 'docs/STUDENT-AGENTS.md', 'docs/DESIGN.md', 'research/SOURCES.md',
          'research/video-metadata.json']
+SOURCES = {'AGENTS.md': 'docs/STUDENT-AGENTS.md'}
 
 
 def main():
@@ -20,7 +21,7 @@ def main():
     hashes = {}
     with tarfile.open(package, 'w:gz', format=tarfile.PAX_FORMAT) as tar:
         for name in FILES:
-            p = ROOT / name
+            p = ROOT / SOURCES.get(name, name)
             assert p.is_file(), name
             hashes[name] = hashlib.sha256(p.read_bytes()).hexdigest()
             info = tar.gettarinfo(str(p), arcname='orbit-lab/' + name)
@@ -32,7 +33,7 @@ def main():
     windows_package = target / 'orbit-lab-handout.zip'
     with zipfile.ZipFile(windows_package, 'w', zipfile.ZIP_DEFLATED) as z:
         for name in FILES:
-            z.write(ROOT / name, 'orbit-lab/' + name)
+            z.write(ROOT / SOURCES.get(name, name), 'orbit-lab/' + name)
     manifest = {'package': package.name, 'sha256': hashlib.sha256(package.read_bytes()).hexdigest(),
                 'windows_package': windows_package.name,
                 'windows_sha256': hashlib.sha256(windows_package.read_bytes()).hexdigest(),

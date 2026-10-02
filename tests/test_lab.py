@@ -239,7 +239,11 @@ class LabTest(unittest.TestCase):
         self.assertNotEqual(json.loads((new / 'state.json').read_text())['station_id'], self.s['station_id'])
 
     def test_tutor_rules_exist_and_refresh_on_resume(self):
-        expected = (APP / 'AGENTS.md').read_text()
+        expected = (APP / 'docs/STUDENT-AGENTS.md').read_text()
+        for forbidden in ['维护模式', 'Git 工作约定', 'commit', 'push', 'Release']:
+            self.assertNotIn(forbidden, expected)
+        self.assertIn('不直接编辑学生作业文件', expected)
+        self.assertIn('该单步的修正', expected)
         self.assertEqual((self.root / 'AGENTS.md').read_text(), expected)
         self.assertTrue((self.root / 'STUDENT.md').is_file())
         (self.root / 'AGENTS.md').write_text('outdated copy')
@@ -248,6 +252,10 @@ class LabTest(unittest.TestCase):
                        capture_output=True, text=True, check=True)
         self.assertEqual((self.root / 'AGENTS.md').read_text(), expected)
         self.assertEqual((self.root / 'notes.md').read_bytes(), (APP / 'notes.md').read_bytes())
+        # Repair can restore an older checkpoint; it must refresh the rules too.
+        (self.session / 'checkpoints/phase-1/AGENTS.md').write_text('old developer instructions')
+        self.cli('repair')
+        self.assertEqual((self.root / 'AGENTS.md').read_text(), expected)
 
     def test_notes_available_anywhere_without_progress_changes(self):
         before = self.state()

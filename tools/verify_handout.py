@@ -21,11 +21,15 @@ def main():
     assert hashlib.sha256(package.read_bytes()).hexdigest() == manifest['sha256']
     windows_package = ROOT / 'dist' / manifest['windows_package']
     assert hashlib.sha256(windows_package.read_bytes()).hexdigest() == manifest['windows_sha256']
+    student_rules = (ROOT / 'docs/STUDENT-AGENTS.md').read_bytes()
+    assert student_rules != (ROOT / 'AGENTS.md').read_bytes()
     with zipfile.ZipFile(windows_package) as z:
         assert z.testzip() is None
         assert set(z.namelist()) == {'orbit-lab/' + n for n in manifest['files']}
         for name, digest in manifest['files'].items():
             assert hashlib.sha256(z.read('orbit-lab/' + name)).hexdigest() == digest, name
+        assert z.read('orbit-lab/AGENTS.md') == student_rules
+        assert z.read('orbit-lab/docs/STUDENT-AGENTS.md') == student_rules
     start = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='orbit-handout-') as temp:
         dest = Path(temp)
@@ -42,6 +46,8 @@ def main():
         for name, digest in manifest['files'].items():
             assert hashlib.sha256((app / name).read_bytes()).hexdigest() == digest, name
         assert not (app / 'tests').exists()
+        assert (app / 'AGENTS.md').read_bytes() == student_rules
+        assert (app / 'docs/STUDENT-AGENTS.md').read_bytes() == student_rules
         subprocess.run(['bash', str(app / 'setup.sh'), '--check'], check=True)
         subprocess.run(['bash', str(app / 'start.sh'), '--doctor'], check=True)
         # Run selected integration scenarios against the extracted executable code.
