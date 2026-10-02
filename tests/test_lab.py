@@ -260,8 +260,13 @@ class LabTest(unittest.TestCase):
         self.assertNotIn('## grep', section)
         for topic in ['cd', 'pwd']:
             self.assertIn('change directory', self.cli('notes', topic))
-        self.assertIn('## glob', self.cli('notes', '*'))
-        self.assertEqual(self.cli('notes', 'all').rstrip(), (APP / 'notes.md').read_text().rstrip())
+        self.assertIn('glob', self.cli('notes', '*'))
+        rendered = self.cli('notes', 'all')
+        self.assertIn('human-readable', rendered)
+        self.assertIn('sources', rendered)
+        self.assertNotIn('**', rendered)
+        self.assertNotIn('| ---', rendered)
+        self.assertNotIn('## tail', self.cli('notes', 'tail'))
         self.cli('notes', '../state.json', ok=False)
         self.assertEqual(self.state(), before)
 

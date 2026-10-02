@@ -18,6 +18,7 @@ import time
 from datetime import datetime, timezone
 
 from lessons import TITLES, SKILLS, REWARDS, REFLECTIONS, HINTS, CARDS, HELP, brief, explain_options
+from terminal_notes import render_markdown
 
 APP = Path(__file__).resolve().parent
 VERSION = '1.0.0'
@@ -536,10 +537,10 @@ def show_notes(topic):
         sections[title.split()[0]] = (title, '## ' + part.rstrip())
     topic = {'cd': 'navigation', 'pwd': 'navigation', '*': 'glob'}.get(topic, topic)
     if topic == 'all':
-        print(text)
+        print(render_markdown(text))
     elif topic:
         require(topic in sections, '没有这个笔记主题；输入 lab notes 查看目录。')
-        print(sections[topic][1])
+        print(render_markdown(sections[topic][1]))
     else:
         print('Linux 常用命令参数笔记（notes.md）')
         print('先认识命令名，再查“参数 / 英文原词 / 作用说明 / 记忆联想”。\n')
