@@ -270,6 +270,54 @@ class LabTest(unittest.TestCase):
         self.cli('notes', '../state.json', ok=False)
         self.assertEqual(self.state(), before)
 
+    def test_lab_input_errors_are_friendly_and_preserve_session(self):
+        before = self.state()
+        cases = [
+            (('note', 'tail'), 'lab notes tail'),
+            (('chekc',), 'lab check'),
+            (('notess', 'tail'), 'lab notes tail'),
+            (('NOTES', 'tail'), '大小写'),
+            (('zzzzzzz',), 'lab help'),
+            (('ls',), '前面不用加 lab'),
+            (('exit',), '直接输入 exit'),
+            (('notes', 'til'), 'lab notes tail'),
+            (('notes', 'cp', 'mv'), '一次查询一个'),
+            (('notes', '--unknown'), 'lab notes'),
+            (('hint', 'four'), '1、2、3'),
+            (('hint', '0'), '1、2、3'),
+            (('hint', '4'), '1、2、3'),
+            (('check', 'one', 'two'), '最多一个答案'),
+            (('learn', 'tail'), 'lab notes'),
+            (('--unknown',), 'lab help'),
+            (('_worker',), 'lab load'),
+        ]
+        cases += [((name, 'extra'), '用法') for name in
+                  ['mission', 'status', 'help', 'root', 'load', 'stop', 'repair', 'report', 'doctor', 'relay']]
+        cases.append((('prepare', '--unknown'), 'bash start.sh'))
+        for args, expected in cases:
+            with self.subTest(args=args):
+                output = self.cli(*args, ok=False)
+                self.assertIn(expected, output)
+                for raw in ['Traceback', 'usage: orbit.py', 'invalid choice:', 'unrecognized arguments:', 'argparse']:
+                    self.assertNotIn(raw, output)
+                self.assertEqual(self.state(), before)
+        self.assertEqual(self.cli('--help'), self.cli('help'))
+        self.assertIn('一次查询一个', self.cli('notes', '--help'))
+
+    def test_shell_unknown_commands_suggest_without_execution(self):
+        before = self.state()
+        rc = shlex.quote(str(APP / 'shellrc.sh'))
+        for wrong, expected in [('lss', 'ls'), ('lablearn', 'lab learn'), ('cd..', 'cd ..')]:
+            # The quoted argument must remain data, even in the suggested command.
+            command = f'source {rc} >/dev/null; ' + shlex.join([wrong, '; touch work/not-executed'])
+            p = subprocess.run(['bash', '-c', command], env=self.env, cwd=self.root,
+                               capture_output=True, text=True, timeout=10)
+            self.assertEqual(p.returncode, 127)
+            self.assertIn(expected, p.stderr)
+            self.assertIn("'; touch work/not-executed'", p.stderr)
+            self.assertFalse((self.root / 'work/not-executed').exists())
+        self.assertEqual(self.state(), before)
+
     def test_real_interactive_launcher_vim_and_resume(self):
         master, slave = pty.openpty()
         env = dict(self.env, TERM='xterm-256color')

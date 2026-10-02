@@ -52,6 +52,8 @@ def main():
         spec.loader.exec_module(module)
         module.APP = app
         names = ['test_full_real_command_walkthrough_and_resume',
+                 'test_lab_input_errors_are_friendly_and_preserve_session',
+                 'test_shell_unknown_commands_suggest_without_execution',
                  'test_notes_available_anywhere_without_progress_changes',
                  'test_glob_cleanup_selection_and_overbroad_patterns',
                  'test_legacy_cleanup_session_resumes_without_new_requirements',

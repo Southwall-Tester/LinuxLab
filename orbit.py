@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """ORBIT: a local, state-based Linux teaching lab (Python 3.9+)."""
-import argparse
 import ctypes
 import hashlib
 import io
@@ -19,6 +18,8 @@ from datetime import datetime, timezone
 
 from lessons import TITLES, SKILLS, REWARDS, REFLECTIONS, HINTS, CARDS, HELP, brief, explain_options
 from terminal_notes import render_markdown
+from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
+                          unknown_topic, shell_lookup_error, runtime_error)
 
 APP = Path(__file__).resolve().parent
 VERSION = '1.0.0'
@@ -502,7 +503,7 @@ def check(session, s, answer):
         return 0
     except (LabError, OSError, UnicodeError, tarfile.TarError, EOFError) as e:
         s['events'].append({'at': now(), 'phase': n, 'result': 'retry', 'reason': str(e)})
-        print('\n[尚未通过] ' + str(e))
+        print('\n[尚未通过] ' + runtime_error(e))
         print('进度未回退。lab hint 获取提示；lab learn 查命令；误操作可 lab repair。')
         return 1
 
@@ -539,7 +540,8 @@ def show_notes(topic):
     if topic == 'all':
         print(render_markdown(text))
     elif topic:
-        require(topic in sections, '没有这个笔记主题；输入 lab notes 查看目录。')
+        if topic not in sections:
+            raise InputError(unknown_topic(topic, list(sections) + ['cd', 'pwd', 'all']))
         print(render_markdown(sections[topic][1]))
     else:
         print('Linux 常用命令参数笔记（notes.md）')
@@ -600,10 +602,25 @@ def run_command(args, session, s):
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == '_worker':
-        worker(Path(sys.argv[2]), sys.argv[3])
+    argv = sys.argv[1:]
+    if argv and argv[0] == '--shell-command-not-found':
+        require(len(argv) >= 2, '输入 lab help 查看实验命令。')
+        print('[命令未找到] ' + shell_lookup_error(argv[1], argv[2:]), file=sys.stderr)
+        return 127
+    if argv and argv[0] == '_worker':
+        require(len(argv) == 3, '练习探针请通过 lab load 启动。')
+        worker(Path(argv[1]), argv[2])
         return 0
-    parser = argparse.ArgumentParser(description='ORBIT Linux 学习实验')
+    if argv in (['-h'], ['--help']):
+        print(HELP)
+        return 0
+    if argv and argv[0] not in USAGE and not argv[0].startswith('-'):
+        raise InputError(unknown_lab_command(argv[0], argv[1:]))
+    if len(argv) == 2 and argv[0] in USAGE and argv[1] in ('-h', '--help'):
+        print('用法：' + USAGE[argv[0]])
+        return 0
+    parser = LabParser(prog='lab', description='ORBIT Linux 学习实验')
+    parser.command_name = argv[0] if argv else ''
     sub = parser.add_subparsers(dest='command')
     p = sub.add_parser('prepare'); p.add_argument('--new', action='store_true')
     sub.add_parser('doctor')
@@ -613,7 +630,7 @@ def main():
     p = sub.add_parser('hint'); p.add_argument('level', nargs='?', type=int, choices=[1, 2, 3])
     p = sub.add_parser('notes'); p.add_argument('topic', nargs='?', default='')
     p = sub.add_parser('stop'); p.add_argument('--quiet', action='store_true')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     args.command = args.command or 'mission'
     if args.command == 'prepare':
         print(prepare(args.new)); return 0
@@ -637,8 +654,15 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except (LabError, OSError, ValueError, tarfile.TarError) as exc:
-        print('[ORBIT] ' + str(exc), file=sys.stderr)
+        print('[ORBIT] ' + runtime_error(exc), file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         print('\n已取消；已通过的关卡会保留。', file=sys.stderr)
         sys.exit(130)
+    except Exception as exc:
+        print(f'[ORBIT] 程序出现内部异常（{type(exc).__name__}），本次操作未正常完成。'
+              '请保留现场，并把这条提示反馈给维护者。', file=sys.stderr)
+        if os.environ.get('ORBIT_DEBUG') == '1':
+            import traceback
+            traceback.print_exc()
+        sys.exit(1)
