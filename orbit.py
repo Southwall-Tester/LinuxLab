@@ -22,7 +22,7 @@ from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
                           unknown_topic, shell_lookup_error, runtime_error)
 
 APP = Path(__file__).resolve().parent
-VERSION = '1.0.1'
+VERSION = '1.0.2'
 MARKER = 'orbit-linux-lab-v1'
 
 
@@ -345,8 +345,7 @@ def start_worker(session, s):
         if p.poll() is not None:
             raise LabError('探针未能启动，请查看 logs/pulse.log。')
         time.sleep(0.02)
-    print('探针已启动：station-pulse，最多运行 90 秒。现在运行 top，按 q 返回。')
-    print(explain_options('也可以 tail -f logs/pulse.log 观察日志；Ctrl+C 结束跟随。', 'tail-f'))
+    print('探针已启动：station-pulse，最多运行 90 秒。请确定它的进程编号 PID。')
 
 
 def worker(session, token):
