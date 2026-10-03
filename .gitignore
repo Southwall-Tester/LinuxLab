@@ -20,3 +20,9 @@ history
 !.env.example
 *.log
 *.tmp
+
+# Local model credentials; only the empty example belongs in source/handouts.
+ai.local.json
+ai.local.*.json
+learning-notebook.md
+tracking.enabled

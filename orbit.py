@@ -20,14 +20,22 @@ from lessons import TITLES, SKILLS, REWARDS, REFLECTIONS, HINTS, CARDS, HELP, br
 from terminal_notes import render_markdown
 from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
                           unknown_topic, shell_lookup_error, runtime_error)
+from knowledge import CONCEPTS, PHASE_CONCEPTS, feedback
+import learning
+import ai_tutor
+import activity
+import scenes
 
 APP = Path(__file__).resolve().parent
-VERSION = '1.0.2'
+VERSION = '1.1.0-dev'
 MARKER = 'orbit-linux-lab-v1'
 
 
 class LabError(Exception):
-    pass
+    def __init__(self, message, code='unknown', facts=None):
+        super().__init__(message)
+        self.code = code
+        self.facts = facts or []
 
 
 def now():
@@ -55,14 +63,14 @@ def safe_path(root, rel):
     root = Path(root)
     path = root / rel
     if root.is_symlink() or not path.resolve().is_relative_to(root.resolve()):
-        raise LabError('路径离开了本局目录：' + str(rel))
+        raise LabError('路径离开了本局目录：' + str(rel), 'path_type')
     p = root
     for part in Path(rel).parts:
         if part == '..':
-            raise LabError('练习路径不能包含 ..')
+            raise LabError('练习路径不能包含 ..', 'path_type')
         p = p / part
         if p.is_symlink():
-            raise LabError('请使用普通文件/目录，不使用符号链接：' + str(rel))
+            raise LabError('请使用普通文件/目录，不使用符号链接：' + str(rel), 'path_type')
     return path
 
 
@@ -73,16 +81,21 @@ def write(root, rel, text, mode=0o644):
     p.chmod(mode)
 
 
-def content(root, rel):
+def content(root, rel, code='file'):
     p = safe_path(root, rel)
     if not p.is_file() or p.stat().st_size > 65536:
-        raise LabError(f'文件缺失、类型不对或过大：{rel}')
+        facts = []
+        if not p.exists() and Path(rel).name.startswith('.'):
+            facts.append('hidden_missing')
+        if code == 'backup' and activity.scene_facts(root)['backup_nested_present']:
+            facts.append('nested_backup')
+        raise LabError(f'文件缺失、类型不对或过大：{rel}', code, facts)
     return p.read_text(encoding='utf-8')
 
 
-def require(condition, message):
+def require(condition, message, code='unknown'):
     if not condition:
-        raise LabError(message)
+        raise LabError(message, code)
 
 
 def cfg(s, final=False, initial=False):
@@ -98,9 +111,9 @@ def parse_cfg(text):
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        require('=' in line, '配置行应为 KEY=value。')
+        require('=' in line, '配置行应为 KEY=value。', 'config_format')
         key, value = (x.strip() for x in line.split('=', 1))
-        require(key not in data, f'配置中 {key} 重复，请只保留一次。')
+        require(key not in data, f'配置中 {key} 重复，请只保留一次。', 'config_duplicate')
         data[key] = value
     return data
 
@@ -109,8 +122,8 @@ def validate_config(text, s, final=False):
     actual = parse_cfg(text)
     expected = parse_cfg(cfg(s, final=final))
     for key, val in expected.items():
-        require(actual.get(key) == val, f'{key} 尚未正确设置；请回看本关要求和最新日志。')
-    require(actual.keys() == expected.keys(), '配置只应包含 STATION、MODE、CHANNEL、AUTH 四个字段。')
+        require(actual.get(key) == val, f'{key} 尚未正确设置；请回看本关要求和最新日志。', 'config_value')
+    require(actual.keys() == expected.keys(), '配置只应包含 STATION、MODE、CHANNEL、AUTH 四个字段。', 'config_keys')
 
 
 def crew(s):
@@ -209,7 +222,7 @@ def generate_final(root, s):
 def sync_guides(root):
     # Never copy the repository's maintainer instructions into a learner session.
     write(root, 'AGENTS.md', (APP / 'docs/STUDENT-AGENTS.md').read_text(encoding='utf-8'))
-    for name in ['STUDENT.md', 'notes.md']:
+    for name in ['STUDENT.md', 'notes.md', 'docs/LOCAL-AI.md']:
         source = APP / name
         if source.is_file():
             write(root, name, source.read_text(encoding='utf-8'))
@@ -278,14 +291,14 @@ def load_session(session):
     return s
 
 
-def equal_file(root, path, expected, message=None):
-    require(content(root, path) == expected, message or f'{path} 内容与本局原件不符。')
+def equal_file(root, path, expected, message=None, code='file'):
+    require(content(root, path, code) == expected, message or f'{path} 内容与本局原件不符。', code)
 
 
 def validate_backup(root, s):
     for name, text in blackbox(s).items():
-        equal_file(root, 'blackbox/' + name, text, 'blackbox 原件不完整：' + name)
-        equal_file(root, 'work/backup/' + name, text, '备份内容不完整：' + name)
+        equal_file(root, 'blackbox/' + name, text, 'blackbox 原件不完整：' + name, 'original')
+        equal_file(root, 'work/backup/' + name, text, '备份内容不完整：' + name, 'backup')
 
 
 def proc_identity(pid):
@@ -367,87 +380,88 @@ def worker(session, token):
 
 def validate_archive(root, s):
     archive = safe_path(root, 'work/rescue.tar.gz')
-    require(archive.is_file(), '还没有 work/rescue.tar.gz。')
-    require(archive.stat().st_size < 2_000_000, '归档过大，应仅包含三个交付文件。')
+    require(archive.is_file(), '还没有 work/rescue.tar.gz。', 'archive_missing')
+    require(archive.stat().st_size < 2_000_000, '归档过大，应仅包含三个交付文件。', 'archive_layout')
     expected = {'dispatch/relay.conf', 'dispatch/crew.csv', 'dispatch/receipt.txt'}
     seen = set()
     with tarfile.open(archive, 'r:gz') as tar:
         for index, member in enumerate(tar):
-            require(index < 16, '归档含过多成员。')
+            require(index < 16, '归档含过多成员。', 'archive_layout')
             name = member.name
             require(not name.startswith('/') and '..' not in PurePosixPath(name).parts,
-                    '归档不能包含绝对路径或 ..。')
+                    '归档不能包含绝对路径或 ..。', 'archive_layout')
             name = str(PurePosixPath(name))
             if member.isdir():
-                require(name == 'dispatch', '归档中多套了目录：' + name)
+                require(name == 'dispatch', '归档中多套了目录：' + name, 'archive_layout')
                 continue
-            require(member.isfile() and not member.issparse(), '交付成员必须是普通文件，不能是链接或特殊文件。')
-            require(name in expected, '归档包含多余文件或路径层级错误：' + name)
-            require(name not in seen, '归档中有重复成员：' + name)
-            require(member.size <= 65536, '归档成员过大：' + name)
+            require(member.isfile() and not member.issparse(), '交付成员必须是普通文件，不能是链接或特殊文件。', 'archive_layout')
+            require(name in expected, '归档包含多余文件或路径层级错误：' + name, 'archive_layout')
+            require(name not in seen, '归档中有重复成员：' + name, 'archive_layout')
+            require(member.size <= 65536, '归档成员过大：' + name, 'archive_layout')
             seen.add(name)
             with tar.extractfile(member) as f:
                 text = f.read().decode('utf-8')
             if name.endswith('relay.conf'):
                 validate_config(text, s, final=True)
-                require(member.mode & 0o7777 == 0o600, '归档内 relay.conf 权限应为 600；修改后重新打包。')
+                require(member.mode & 0o7777 == 0o600, '归档内 relay.conf 权限应为 600；修改后重新打包。', 'archive_permissions')
             elif name.endswith('crew.csv'):
-                require(text == crew(s), '归档中的 crew.csv 与本局名单不符。')
+                require(text == crew(s), '归档中的 crew.csv 与本局名单不符。', 'archive_content')
             else:
-                require(text == receipt(s), '归档中的 receipt.txt 与本局启动回执不符。')
-    require(seen == expected, '归档缺少：' + ', '.join(sorted(expected - seen)))
+                require(text == receipt(s), '归档中的 receipt.txt 与本局启动回执不符。', 'archive_content')
+    require(seen == expected, '归档缺少：' + ', '.join(sorted(expected - seen)), 'archive_layout')
 
 
 def validate(n, session, s, answer):
     root = session / 'station'
     if n == 1:
-        require(Path.cwd().resolve() == (root / 'airlock').resolve(), '先 cd 到 station/airlock，再在里面提交。')
-        require(safe_path(root, 'work/evidence').is_dir(), '还没有 work/evidence 目录；请用 mkdir 创建。')
-        require(answer == s['beacon'], explain_options('信标数字不对；用 ls -a 查看 .beacon- 后面的四位数字。', 'ls-a'))
+        require(Path.cwd().resolve() == (root / 'airlock').resolve(), '先 cd 到 station/airlock，再在里面提交。', 'location')
+        require(safe_path(root, 'work/evidence').is_dir(), '还没有 work/evidence 目录；请用 mkdir 创建。', 'directory')
+        require(answer == s['beacon'], explain_options('信标数字不对；用 ls -a 查看 .beacon- 后面的四位数字。', 'ls-a'), 'beacon')
     elif n == 2:
         validate_backup(root, s)
     elif n == 3:
-        equal_file(root, 'work/evidence/route.txt', route(s))
+        equal_file(root, 'work/evidence/route.txt', route(s), code='move')
         for path in ['inbox/route.pending'] + ['inbox/' + name for name in cleanup_targets(s)]:
-            require(not safe_path(root, path).exists(), '这个文件仍在原位置：' + path)
-        equal_file(root, 'inbox/crew.csv', crew(s), '名单 crew.csv 丢失或被改动，请保留原件。')
+            require(not safe_path(root, path).exists(), '这个文件仍在原位置：' + path,
+                    'move' if path.endswith('route.pending') else 'cleanup')
+        equal_file(root, 'inbox/crew.csv', crew(s), '名单 crew.csv 丢失或被改动，请保留原件。', 'preserve')
         for name, text in cleanup_kept(s).items():
-            equal_file(root, 'inbox/' + name, text, '需要保留的文件被改动：inbox/' + name)
+            equal_file(root, 'inbox/' + name, text, '需要保留的文件被改动：inbox/' + name, 'preserve')
     elif n == 4:
-        require(answer == s['seal'], 'SEAL 不匹配，请读取解出的 manifest.txt。')
-        equal_file(root, 'work/recovered/manifest.txt', f"STATION={s['station_id']}\nSEAL={s['seal']}\n先验证密封，再修复配置。\n")
-        equal_file(root, 'work/recovered/relay.conf', cfg(s, initial=True))
-        equal_file(root, 'work/recovered/relay.sh', RELAY)
+        require(answer == s['seal'], 'SEAL 不匹配，请读取解出的 manifest.txt。', 'seal')
+        equal_file(root, 'work/recovered/manifest.txt', f"STATION={s['station_id']}\nSEAL={s['seal']}\n先验证密封，再修复配置。\n", code='extraction')
+        equal_file(root, 'work/recovered/relay.conf', cfg(s, initial=True), code='extraction')
+        equal_file(root, 'work/recovered/relay.sh', RELAY, code='extraction')
     elif n == 5:
-        require(answer == s['code'], '不是最新授权码。请读日志最后一条 READY，忽略 HEARTBEAT 和旧 READY。')
+        require(answer == s['code'], '不是最新授权码。请读日志最后一条 READY，忽略 HEARTBEAT 和旧 READY。', 'log_record')
     elif n == 6:
-        validate_config(content(root, 'work/recovered/relay.conf'), s)
+        validate_config(content(root, 'work/recovered/relay.conf', 'config_file'), s)
     elif n == 7:
         validate_relay(root, s)
-        equal_file(root, 'work/recovered/receipt.txt', receipt(s), '尚未得到正确启动回执。请运行 ./relay.sh。')
+        equal_file(root, 'work/recovered/receipt.txt', receipt(s), '尚未得到正确启动回执。请运行 ./relay.sh。', 'receipt')
     elif n == 8:
-        require(worker_alive(s.get('worker')), '本局探针尚未运行或已超时。请先 lab load，再观察 top。')
-        require(answer == str(s['worker']['pid']), 'PID 不匹配，请定位 COMMAND 为 station-pulse 的那一行。')
+        require(worker_alive(s.get('worker')), '本局探针尚未运行或已超时。请先 lab load，再观察 top。', 'process_absent')
+        require(answer == str(s['worker']['pid']), 'PID 不匹配，请定位 COMMAND 为 station-pulse 的那一行。', 'process_identity')
     elif n == 9:
         validate_backup(root, s)
         validate_archive(root, s)
 
 
 def validate_relay(root, s):
-    validate_config(content(root, 'work/recovered/relay.conf'), s)
-    equal_file(root, 'work/recovered/relay.sh', RELAY, '启动脚本内容被修改，请使用原脚本。')
+    validate_config(content(root, 'work/recovered/relay.conf', 'config_file'), s)
+    equal_file(root, 'work/recovered/relay.sh', RELAY, '启动脚本内容被修改，请使用原脚本。', 'script')
     for name, mode in [('relay.conf', 0o600), ('relay.sh', 0o700)]:
         p = safe_path(root, 'work/recovered/' + name)
         require(stat.S_IMODE(p.stat().st_mode) == mode,
-                f'{name} 权限应为 {mode:o}，当前是 {stat.S_IMODE(p.stat().st_mode):o}。')
+                f'{name} 权限应为 {mode:o}，当前是 {stat.S_IMODE(p.stat().st_mode):o}。', 'permissions')
 
 
 def show_status(s):
-    print(f"\n  ORBIT / 失联空间站    {s['station_id']}    {len(s['done'])}/9")
+    print(scenes.render(f"\n  ORBIT / 失联空间站    {s['station_id']}    {len(s['done'])}/9", s))
     print('  ' + '━' * 46)
     for i, (title, reward) in enumerate(zip(TITLES, REWARDS), 1):
         label = '●' if i in s['done'] else '▶' if i == len(s['done']) + 1 else '○'
-        print(f'  {label} {i:02}  {title}' + (f'  / {reward}' if i in s['done'] else ''))
+        print(scenes.render(f'  {label} {i:02}  {title}' + (f'  / {reward}' if i in s['done'] else ''), s))
     print()
 
 
@@ -458,19 +472,35 @@ def report(session, s):
            'hints': s['hints'], 'attempts': s['attempts'], 'events': s['events'],
            'result': s.get('flag'),
            'archive_sha256': s.get('archive_sha256'),
+           'learning': s.get('learning', {}),
+           'scene': s.get('scene', 'space'),
+           'shell_observations': s.get('shell_observations', []),
            'validation_scope': '文件结果与当前进程验证；不证明命令使用过程或独立学习成效。'}
     p = safe_path(session, 'report.json')
     atomic_json(p, out)
     return p
 
 
+def save_notebook(session, s):
+    path = safe_path(session, 'learning-notebook.md')
+    temp = safe_path(session, 'learning-notebook.' + secrets.token_hex(4) + '.tmp')
+    try:
+        temp.write_text(learning.notebook(s), encoding='utf-8')
+        temp.replace(path)
+    finally:
+        if temp.exists():
+            temp.unlink()
+    return path
+
+
 def ending(session, s):
     print('\n  ✦  RESCUE COMPLETE  ✦\n')
-    print('地面站：“交付包已验证。三名船员已接入返航轨道。”')
-    print('你从一个隐藏目录出发，保住黑匣子，恢复中继，送出了最后一份救援包。')
+    print(scenes.render('地面站：“交付包已验证。三名船员已接入返航轨道。”', s))
+    print(scenes.render('你从一个隐藏目录出发，保住黑匣子，恢复中继，送出了最后一份救援包。', s))
     print('\n救援凭证：' + s['flag'])
     print('交付物：' + str(session / 'station/work/rescue.tar.gz'))
     print('通关报告：' + str(report(session, s)))
+    print('个人学习手册：lab notebook；知识点复习：lab review。')
     print(explain_options('输入 exit 退出。想换一组线索重玩：bash start.sh --new。', 'lab-new') + '\n')
 
 
@@ -490,7 +520,8 @@ def check(session, s, answer):
             snapshot(session, n + 1)
         s['done'].append(n)
         s['events'].append({'at': now(), 'phase': n, 'result': 'passed'})
-        print(f'\n[通过 {n:02}/09] {REWARDS[n-1]}')
+        learning.record_check(s, n, True)
+        print(scenes.render(f'\n[通过 {n:02}/09] {REWARDS[n-1]}', s))
         print('本关知识：' + REFLECTIONS[n-1])
         if n == 9:
             s['completed_at'] = now()
@@ -500,12 +531,26 @@ def check(session, s, answer):
             s['archive_sha256'] = digest
             ending(session, s)
         else:
-            print(f'\n下一关 {n+1:02} / {TITLES[n]}\n' + brief(n+1, s))
+            print(scenes.render(f'\n下一关 {n+1:02} / {TITLES[n]}\n' + brief(n+1, s), s))
         return 0
     except (LabError, OSError, UnicodeError, tarfile.TarError, EOFError) as e:
         s['events'].append({'at': now(), 'phase': n, 'result': 'retry', 'reason': str(e)})
+        code = getattr(e, 'code', 'unknown')
+        if isinstance(e, PermissionError):
+            code = 'access'
+        elif isinstance(e, (tarfile.TarError, EOFError)):
+            code = 'archive_format'
+        elif isinstance(e, UnicodeError):
+            code = 'encoding'
+        elif isinstance(e, (NotADirectoryError, IsADirectoryError)):
+            code = 'path_type'
+        elif isinstance(e, FileNotFoundError):
+            code = 'file'
+        item = learning.record_check(s, n, False, code, facts=getattr(e, 'facts', []))
         print('\n[尚未通过] ' + runtime_error(e))
+        print(feedback(item))
         print('进度未回退。lab hint 获取提示；lab learn 查命令；误操作可 lab repair。')
+        print('针对这次问题：lab tutor；复习记录：lab notebook。')
         return 1
 
 
@@ -525,7 +570,10 @@ def repair(session, s):
         root.rename(target)
     shutil.copytree(checkpoint, root)
     sync_guides(root)
-    s['events'].append({'at': now(), 'phase': n, 'result': 'repair'})
+    s['events'].append({'at': now(), 'phase': n, 'result': 'repair',
+                         'operation_cursor': s.get('shell_sequence', 0)})
+    if 'learning' in s:
+        s['learning']['active_issue'] = None
     print('已保存原现场：' + str(target))
     print('已恢复到本关开始时。请立即输入 cd "$(lab root)" 回到新现场，然后 lab。')
 
@@ -560,8 +608,8 @@ def run_command(args, session, s):
         show_status(s)
         if cmd == 'mission':
             if n <= 9:
-                print('本关工具：' + SKILLS[n-1] + '\n\n' + brief(n, s))
-                print('\n提示：lab learn 查看用法；lab hint 逐级求助；lab notes 查看命令参数笔记。')
+                print('本关工具：' + SKILLS[n-1] + '\n\n' + scenes.render(brief(n, s), s))
+                print('\n提示：lab hint 逐级求助；lab tutor 针对问题讲解；lab notebook 查看学习手册。')
             else:
                 ending(session, s)
     elif cmd == 'help':
@@ -577,7 +625,63 @@ def run_command(args, session, s):
         key = str(n)
         level = args.level or min(s['hints'].get(key, 0) + 1, 3)
         s['hints'][key] = max(s['hints'].get(key, 0), level)
-        print(f'提示 {level}/3（不扣分）：\n' + HINTS[n-1][level-1])
+        s['events'].append({'at': now(), 'phase': n, 'result': 'hint', 'level': level})
+        item = learning.active_issue(s, n)
+        hint = (CONCEPTS[item['concepts'][0]]['hints'][level-1]
+                if item['code'] != 'unknown' else HINTS[n-1][level-1])
+        print(f'提示 {level}/3（不扣分）：\n' + hint)
+    elif cmd == 'tutor':
+        require(n <= 9, '已经完成全部关卡。用 lab notebook 复盘，或 lab review 复习知识点。')
+        if args.topic:
+            require(args.topic in PHASE_CONCEPTS[n], '该知识点不属于当前关；用 lab concepts 查看本关知识点。')
+        item, level = learning.tutor_context(s, n, args.level, args.topic)
+        if args.topic:
+            item = dict(item, concepts=[args.topic])
+        topic = CONCEPTS[item['concepts'][0]]
+        for key in item['concepts']:
+            learning.touch_topic(s, key, now())
+        print(f'助教提示 {level}/3 · {topic["title"]}')
+        explanation, source = topic['explanation'], 'local'
+        if not args.offline:
+            try:
+                explanation = ai_tutor.explain(s, item, level, args.question)
+                source = 'ai'
+            except ai_tutor.AIError as e:
+                print(str(e))
+        print(('AI 概念解释：' if source == 'ai' else '本地概念解释：') + explanation)
+        print('下一步：' + topic['hints'][level-1])
+        print('预期观察：用现场结果确认原因；操作与提交由你完成。')
+        print(f'更多说明：lab notes {topic["note"]}。')
+        s['events'].append({'at': now(), 'phase': n, 'result': 'tutor', 'level': level,
+                            'concept': item['concepts'][0], 'source': source})
+    elif cmd == 'concepts':
+        if n <= 9:
+            for key in PHASE_CONCEPTS[n]:
+                print(key + ' · ' + CONCEPTS[key]['title'])
+            print('针对一个知识点求助：lab tutor --topic 知识点；离线可加 --offline。')
+        else:
+            print('全部关卡已完成；lab review 查看本局知识点记录。')
+    elif cmd == 'tracking':
+        if args.mode != 'status':
+            enabled = args.mode == 'on'
+            marker = safe_path(session, 'tracking.enabled')
+            if enabled:
+                write(session, 'tracking.enabled', 'enabled\n', 0o600)
+            elif marker.exists():
+                marker.unlink()
+            s['tracking_enabled'] = enabled
+        print('本地操作记录：' + ('已开启' if s.get('tracking_enabled') else '已关闭'))
+        print('记录实验目录内的命令类别、白名单选项、对象角色、有限文件状态和退出码。')
+        print('不保存原始命令、具体路径或值，不记录输出、按键或停顿；可用 lab tracking off 关闭。')
+    elif cmd == 'activity':
+        print(activity.display(s))
+    elif cmd == 'scene':
+        print(scenes.choose(s, args.name))
+    elif cmd == 'notebook':
+        print(render_markdown(learning.notebook(s)))
+        print('手册文件：' + str(save_notebook(session, s)))
+    elif cmd == 'review':
+        print(learning.review(s, args.topic, args.answer))
     elif cmd == 'learn':
         require(n <= 9, '已经通关，可用 lab notes 查命令笔记，或阅读 STUDENT.md。')
         print(CARDS[n-1])
@@ -599,11 +703,29 @@ def run_command(args, session, s):
     elif cmd == 'report':
         print(f"本局完成 {len(s['done'])}/9 关；检查次数 {sum(s['attempts'].values())}；不设扣分。")
         print('报告：' + str(report(session, s)))
+        print('学习手册：' + str(save_notebook(session, s)))
     return 0
 
 
 def main():
     argv = sys.argv[1:]
+    if argv and argv[0] == '--observe-shell':
+        # Internal prompt hook; errors must not interfere with the learner's shell.
+        try:
+            import fcntl
+            session = Path(os.environ['ORBIT_HOME'])
+            require(session.is_absolute(), '无效周目路径。')
+            require(len(argv) == 3 and 0 <= int(argv[1]) <= 255 and argv[2] in ('0', '1'), '无效观察参数。')
+            line = sys.stdin.read(8192)
+            with safe_path(session, 'state.lock').open('a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                s = load_session(session)
+                cwd = Path(os.environ.get('ORBIT_OBSERVED_CWD', str(Path.cwd())))
+                activity.record(s, session, line, int(argv[1]), cwd, argv[2] == '1')
+                atomic_json(session / 'state.json', s)
+        except (LabError, OSError, ValueError, KeyError):
+            pass
+        return 0
     if argv and argv[0] == '--shell-command-not-found':
         require(len(argv) >= 2, '输入 lab help 查看实验命令。')
         print('[命令未找到] ' + shell_lookup_error(argv[1], argv[2:]), file=sys.stderr)
@@ -625,14 +747,26 @@ def main():
     sub = parser.add_subparsers(dest='command')
     p = sub.add_parser('prepare'); p.add_argument('--new', action='store_true')
     sub.add_parser('doctor')
-    for name in ['mission', 'status', 'help', 'root', 'learn', 'load', 'relay', 'repair', 'report']:
+    for name in ['mission', 'status', 'help', 'root', 'learn', 'load', 'relay', 'repair', 'report', 'concepts', 'notebook', 'activity']:
         sub.add_parser(name)
     p = sub.add_parser('check'); p.add_argument('answer', nargs='?', default='')
     p = sub.add_parser('hint'); p.add_argument('level', nargs='?', type=int, choices=[1, 2, 3])
     p = sub.add_parser('notes'); p.add_argument('topic', nargs='?', default='')
+    p = sub.add_parser('ai'); p.add_argument('action', nargs='?', choices=['init', 'status'], default='status')
+    p = sub.add_parser('tracking'); p.add_argument('mode', nargs='?', choices=['on', 'off', 'status'], default='status')
+    p = sub.add_parser('scene'); p.add_argument('name', nargs='?', default='')
+    p = sub.add_parser('tutor')
+    p.add_argument('question', nargs='?', default='')
+    p.add_argument('--level', type=int, choices=[1, 2, 3])
+    p.add_argument('--topic', default='')
+    p.add_argument('--offline', action='store_true')
+    p = sub.add_parser('review')
+    p.add_argument('topic', nargs='?', default=''); p.add_argument('answer', nargs='?', default='')
     p = sub.add_parser('stop'); p.add_argument('--quiet', action='store_true')
     args = parser.parse_args(argv)
     args.command = args.command or 'mission'
+    if args.command == 'ai':
+        print(ai_tutor.init_config() if args.action == 'init' else ai_tutor.status()); return 0
     if args.command == 'prepare':
         print(prepare(args.new)); return 0
     if args.command == 'doctor':
@@ -649,6 +783,11 @@ def main():
             return run_command(args, session, s)
         finally:
             atomic_json(session / 'state.json', s)
+            if 'learning' in s:
+                try:
+                    save_notebook(session, s)
+                except (LabError, OSError) as e:
+                    print('学习记录已保存，手册暂时无法更新：' + runtime_error(e), file=sys.stderr)
 
 
 if __name__ == '__main__':

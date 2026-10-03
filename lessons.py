@@ -133,33 +133,33 @@ STATION={station} 必须保留；配置只包含这四个字段，每个字段�
 
 
 HINTS = [
-    ['隐藏文件可以用 ls -a 查看；.. 表示上一级。lab root 显示站点根目录。',
-     '在 airlock 里，../work/evidence 指向隔壁 work 中的 evidence；mkdir -p 可以补齐父目录。',
-     '从站点根目录：cd airlock；ls -a；mkdir -p ../work/evidence；lab check 你看到的数字。'],
-    ['先 cd 到站点根目录。目录复制需要递归；不要把文件移动走。',
-     'cp -a 源目录 目标目录 可保留整个目录，包括隐藏文件。目标不存在时会以新名称创建。',
-     '从站点根目录：cp -a blackbox work/backup；然后 lab check。若 backup 已存在，先检查是否多套了目录。'],
-    ['先观察 inbox 的文件名：哪些同时符合任务指定的开头和结尾？相似名称不一定都要删除。',
-     '保留固定的开头和结尾，中间变化的部分用 * 代替；它也能匹配空字符串。先用 ls 查看自己写的模式是否只选中了目标。mv 的第二个参数可同时给出新目录和新文件名。',
-     '从站点根目录先运行 ls inbox/decoy-*.tmp，核对范围；确认后可用 rm inbox/decoy-*.tmp。航线移动：mv inbox/route.pending work/evidence/route.txt；完成后 lab check。'],
-    ['tar -tzf 查看 gzip 归档；tar -xzf 解开。先创建目标目录。',
-     '使用 -C work/recovered 指定解压位置，再 cat work/recovered/manifest.txt。',
-     '从站点根目录：mkdir -p work/recovered；tar -tzf supplies/rescue.tar.gz；tar -xzf supplies/rescue.tar.gz -C work/recovered；cat work/recovered/manifest.txt；lab check 读到的SEAL。'],
-    ['不要逐行翻完整份日志。文件末尾才是最新记录。',
-     '先 cat work/evidence/route.txt，再 tail -n 5 logs/comms.log。忽略后面的 HEARTBEAT。',
-     '最后一条 READY 同时给出 CHANNEL 和 CODE。把 CODE 作为 lab check 的唯一参数；这两个值也会用于第六关。'],
-    ['配置是 KEY=value 文本，等号两边无需空格。先回看 tail -n 5 logs/comms.log。',
-     'vim work/recovered/relay.conf；方向键移动，i 插入，Esc 返回普通模式。:q! 可以放弃本次未保存修改。',
-     '把 MODE 的 maintenance 改成 rescue，把 CHANNEL 和 AUTH 改为最后 READY 的值。保留 STATION；Esc → :wq → 回车 → lab check。'],
-    ['ls -l 的权限列从左至右表示类型、所有者、组和其他人的权限。',
-     '700 = 所有者 rwx、其余无权限；600 = 所有者 rw、其余无权限。执行时使用 ./relay.sh。',
-     '从站点根目录：cd work/recovered；chmod 700 relay.sh；chmod 600 relay.conf；./relay.sh；lab check。'],
-    ['lab load 后再运行 top。top 中 q 退出，P 按 CPU 排序。占用数值会波动。',
-     '单次快照可用 top -b -n 1。COMMAND 列找 station-pulse，左侧第一列是 PID。',
-     '进程已退出就重新 lab load；使用新一行的 PID 执行 lab check。不要提交文档中的示例数字。'],
-    ['先列归档，再解到 work。新频率来自 finale/final.log，不能沿用上一关的 AUTH。',
-     '生成归档时可以先 cd work；这样 tar 内成员会以 dispatch/ 开头。tar -tzf 可检查路径。',
-     '从站点根目录：tar -xzf finale/capsule.tar.gz -C work；mv work/dispatch/relay.conf.draft work/dispatch/relay.conf；rm work/dispatch/discard.tmp；tail -n 4 finale/final.log；vim work/dispatch/relay.conf；chmod 600 work/dispatch/relay.conf；cp inbox/crew.csv work/recovered/receipt.txt work/dispatch/；cd work；tar -czf rescue.tar.gz dispatch；tar -tzf rescue.tar.gz；lab check。'],
+    ['先观察隐藏项目；普通目录列表可能省略它们。',
+     'ls -a 会包含点号开头的名称，注意区分文件与目录。',
+     '观察骨架：ls -a <待观察目录>。目录与信标值由你观察确定。'],
+    ['先比较原件与目标备份的直接子项。',
+     '完整复制要包含隐藏项和子目录；目标已存在时注意是否多套一层。',
+     '观察骨架：ls -la <备份目录>。核对直接子项是否与原件对应。'],
+    ['先观察名称规则与必须保留的对象。',
+     '用 * 表达中间变化的部分，先预览匹配范围。',
+     '观察骨架：ls <你写出的匹配模式>。本步只观察，不删除。'],
+    ['先确认包内保存了哪些路径。',
+     'tar 的 -t 列成员清单；列清单与提取文件是两个操作。',
+     '观察骨架：tar -tzf <归档文件>。对照成员路径判断解包位置。'],
+    ['先区分有效业务记录和状态消息。',
+     'tail -n 观察末尾若干行；末尾一行未必符合任务的记录类型。',
+     '观察骨架：tail -n <行数> <日志文件>。按任务规则辨认记录。'],
+    ['先核对磁盘中保存的配置。',
+     '配置要分别检查 KEY=value 格式、字段唯一性和取值来源。',
+     '观察骨架：cat <配置文件>。逐行核对，暂时不要猜测字段值。'],
+    ['先区分配置与脚本的权限需求。',
+     'ls -l 能查看所有者、组与其他人的权限。',
+     '观察骨架：ls -l <待检查文件>。逐组解释权限位再对照要求。'],
+    ['先确认目标进程仍在运行。',
+     'top 的 PID 与 COMMAND 是不同列，进程结束后旧编号失效。',
+     '观察骨架：top。核对身份和当前编号，按 q 返回终端。'],
+    ['先检查交付包内的成员结构。',
+     '归档是快照；修改外部文件后，旧包不会自动更新。',
+     '观察骨架：tar -tvzf <交付包>。核对成员路径、类型与权限。'],
 ]
 
 CARDS = [
@@ -218,10 +218,20 @@ lab load            第八关启动一个限时练习进程
 lab stop            停止本局练习进程
 lab repair          备份整个现场，并恢复到当前关开始时的文件状态
 lab report          查看/导出本局报告
+lab concepts        查看本关知识点及其标识
+lab tutor ["问题"]  针对最近失败逐级求助；--offline 离线；--topic 指定本关知识点
+lab notebook        查看按本局经历整理的学习手册
+lab review          查看复习清单；lab review 知识点 看题，再加 A/B/C 作答
+lab ai init         创建本地 API 配置；lab ai status 只检查格式，不发送请求
+lab tracking on/off  开关本地操作记录（默认关闭，记录命令语义、有限状态与退出码）
+lab activity         查看最近操作记录；不记录参数、输出或按键
+lab scene            查看可选情境；lab scene ocean 选择海洋主题
 exit                保存退出；再次 bash start.sh 自动续玩
 新周目：退出后 bash start.sh --new；new 是“新建”，显式指定才新开一局，默认续玩；旧文件保留
 
 各任务中的 station/... 均指站点根目录内的路径，不是要求你反复创建 station。
 每关完成后自动保存检查点。hint 不扣分，失败不回档；没有倒计时和爆炸惩罚。
-只记录检查、提示、开始/完成时间；不截取终端输出。Bash 历史仅存在本局目录。
+记录检查、提示、复习与时间；不截取终端输出。Bash 历史仅存在本局目录。
+lab 是本实验的辅助命令；ls、cp、vim 等保持原生 Linux 行为。
+仅主动使用 lab tutor 且启用本地 API 配置时联网；不上传存档或终端历史。
 真实 Shell 不是隔离容器，请在练习目录内操作。'''

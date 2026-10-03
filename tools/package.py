@@ -8,8 +8,10 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['README.md', 'STUDENT.md', 'notes.md', 'AGENTS.md', 'VALIDATION.md',
          'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'orbit.py', 'lessons.py', 'terminal_notes.py', 'cli_messages.py',
+         'knowledge.py', 'learning.py', 'ai_tutor.py', 'activity.py', 'scenes.py', 'ai.example.json',
          '启动实验.cmd', '安装环境.cmd', '检查环境.cmd',
          'docs/SETUP.md', 'docs/AI-TUTOR.md', 'docs/STUDENT-AGENTS.md', 'docs/DESIGN.md', 'research/SOURCES.md',
+         'docs/LOCAL-AI.md',
          'research/video-metadata.json']
 SOURCES = {'AGENTS.md': 'docs/STUDENT-AGENTS.md'}
 

@@ -30,6 +30,9 @@ def main():
             assert hashlib.sha256(z.read('orbit-lab/' + name)).hexdigest() == digest, name
         assert z.read('orbit-lab/AGENTS.md') == student_rules
         assert z.read('orbit-lab/docs/STUDENT-AGENTS.md') == student_rules
+        assert not any('ai.local' in name or 'learning-notebook' in name for name in z.namelist())
+        example = json.loads(z.read('orbit-lab/ai.example.json'))
+        assert example['enabled'] is False and example['api_key'] == ''
     start = time.monotonic()
     with tempfile.TemporaryDirectory(prefix='orbit-handout-') as temp:
         dest = Path(temp)
@@ -66,11 +69,24 @@ def main():
                  'test_real_interactive_launcher_vim_and_resume',
                  'test_tutor_rules_exist_and_refresh_on_resume']
         suite = unittest.TestSuite(module.LabTest(name) for name in names)
+        # Exercise the installed handout's teaching code as well as the core lab.
+        sys.path.insert(0, str(ROOT / 'tests'))
+        import test_lab as fixtures
+        fixtures.APP = app
+        import test_teaching
+        test_teaching.APP = app
+        teaching_names = ['test_nine_phase_diagnostics_not_just_paths',
+                          'test_tutor_review_resume_and_repair_preserve_evidence',
+                          'test_real_shell_trace_changes_diagnosis_without_recording_raw_values',
+                          'test_scene_switch_preserves_files_and_assessment',
+                          'test_missing_config_falls_back_without_executing_question']
+        suite.addTests(test_teaching.TeachingIntegration(name) for name in teaching_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
               'windows_package_sha256': manifest['windows_sha256'],
               'packaged_integration_tests': names, 'passed': True,
+              'packaged_teaching_tests': teaching_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

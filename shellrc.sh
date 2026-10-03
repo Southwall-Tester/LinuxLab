@@ -13,6 +13,25 @@ HISTFILE="$ORBIT_HOME/history"
 HISTSIZE=2000
 HISTFILESIZE=2000
 shopt -s histappend checkwinsize
+_orbit_previous_pwd=$PWD
+# Opt-in observation of completed commands, not an editor/keystroke logger.
+# Preserve the command's status for the user's next `$?` expression.
+_orbit_observe_prompt() {
+  local orbit_status=$?
+  local orbit_line
+  local orbit_dotglob=0
+  if [[ -f "$ORBIT_HOME/tracking.enabled" ]]; then
+    orbit_line="$(HISTTIMEFORMAT= builtin history 1)"
+    if [[ -n "$orbit_line" && "$orbit_line" != "${_orbit_last_observed_line:-}" ]]; then
+      _orbit_last_observed_line="$orbit_line"
+      shopt -q dotglob && orbit_dotglob=1
+      printf '%s' "$orbit_line" | ORBIT_OBSERVED_CWD="$_orbit_previous_pwd" python3 "$ORBIT_ENGINE" --observe-shell "$orbit_status" "$orbit_dotglob" >/dev/null 2>&1
+    fi
+  fi
+  _orbit_previous_pwd=$PWD
+  return "$orbit_status"
+}
+PROMPT_COMMAND=_orbit_observe_prompt
 PS1='\[\e[38;5;45m\]ORBIT\[\e[0m\] \w\n\$ '
 trap 'python3 "$ORBIT_ENGINE" stop --quiet' EXIT
 printf '\n真实 Bash 已就绪。输入 lab 查看任务，lab help 查看帮助，exit 存档退出。\n'

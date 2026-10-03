@@ -25,7 +25,8 @@ class LabTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='orbit-test-')
         self.env = dict(os.environ, ORBIT_DATA_DIR=self.temp.name, PYTHONUTF8='1',
-                        ORBIT_ENGINE=str(APP / 'orbit.py'))
+                        ORBIT_ENGINE=str(APP / 'orbit.py'),
+                        ORBIT_AI_CONFIG=str(Path(self.temp.name) / 'test-ai.local.json'))
         p = subprocess.run([sys.executable, str(APP / 'orbit.py'), 'prepare'],
                            env=self.env, capture_output=True, text=True, check=True)
         self.session = Path(p.stdout.strip())
