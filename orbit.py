@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ORBIT: a local, state-based Linux teaching lab (Python 3.9+)."""
+"""LinuxLab: a local, state-based Linux teaching lab (Python 3.9+)."""
 import ctypes
 import hashlib
 import io
@@ -31,7 +31,9 @@ import tasks
 import error_patterns
 
 APP = Path(__file__).resolve().parent
-VERSION = '2.0.0'
+VERSION = '2.0.1'
+PRODUCT_NAME = 'LinuxLab'
+# Storage identifiers and ORBIT_* variables remain compatible with old rounds.
 MARKER = 'orbit-linux-lab-v1'
 
 
@@ -352,7 +354,7 @@ def prepare(new=False, scene='', interactive=False):
 def load_session(session):
     require(not session.is_symlink(), '周目目录不能是符号链接。')
     s = read_json(safe_path(session, 'state.json'))
-    require(s.get('format') == MARKER, '这不是 ORBIT 的有效存档。')
+    require(s.get('format') == MARKER, '这不是 LinuxLab 的有效存档。')
     require(isinstance(s.get('done'), list) and s['done'] == list(range(1, len(s['done']) + 1))
             and len(s['done']) <= 9, '存档进度异常。')
     # Legacy rounds have no contract identifiers. When an identifier was
@@ -539,7 +541,7 @@ def validate_relay(root, s):
 
 def show_status(s):
     scene = scenes.get(s)
-    print(f"\n  ORBIT / {scene['title']}    {s['station_id']}    {len(s['done'])}/9")
+    print(f"\n  {PRODUCT_NAME} / {scene['title']}    {s['station_id']}    {len(s['done'])}/9")
     print('  ' + LAB_SCOPE)
     print('  ' + '━' * 46)
     for i, (title, reward) in enumerate(zip(scene['titles'], scene['rewards']), 1):
@@ -549,7 +551,7 @@ def show_status(s):
 
 
 def report(session, s):
-    out = {'lab': 'ORBIT', 'version': VERSION, 'run_id': s['id'], 'station': s['station_id'],
+    out = {'lab': PRODUCT_NAME, 'version': VERSION, 'run_id': s['id'], 'station': s['station_id'],
            'completed': len(s['done']) == 9, 'phases_passed': len(s['done']),
            'created_at': s['created_at'], 'completed_at': s.get('completed_at'),
            'hints': s['hints'], 'attempts': s['attempts'], 'events': s['events'],
@@ -710,7 +712,7 @@ def check(session, s, answer):
             s['completed_at'] = now()
             archive = task_path(session / 'station', s, 'work/rescue.tar.gz')
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-            s['flag'] = 'ORBIT{' + s['station_id'] + '-' + digest[:16].upper() + '}'
+            s['flag'] = 'LINUXLAB{' + s['station_id'] + '-' + digest[:16].upper() + '}'
             s['archive_sha256'] = digest
             ending(session, s)
         else:
@@ -953,7 +955,7 @@ def main():
     if len(argv) == 2 and argv[0] in USAGE and argv[1] in ('-h', '--help'):
         print('用法：' + USAGE[argv[0]])
         return 0
-    parser = LabParser(prog='lab', description='ORBIT Linux 学习实验')
+    parser = LabParser(prog='lab', description='LinuxLab 情境式 Linux 学习实验')
     parser.command_name = argv[0] if argv else ''
     sub = parser.add_subparsers(dest='command')
     p = sub.add_parser('prepare'); p.add_argument('--new', action='store_true')
@@ -998,7 +1000,7 @@ def main():
         try:
             return run_command(args, session, s)
         except (LabError, OSError, ValueError, tarfile.TarError) as e:
-            print('[ORBIT] ' + layout.text(s, runtime_error(e)), file=sys.stderr)
+            print('[LinuxLab] ' + layout.text(s, runtime_error(e)), file=sys.stderr)
             return 1
         finally:
             atomic_json(session / 'state.json', s)
@@ -1013,13 +1015,13 @@ if __name__ == '__main__':
     try:
         sys.exit(main())
     except (LabError, OSError, ValueError, tarfile.TarError) as exc:
-        print('[ORBIT] ' + runtime_error(exc), file=sys.stderr)
+        print('[LinuxLab] ' + runtime_error(exc), file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         print('\n已取消；已通过的关卡会保留。', file=sys.stderr)
         sys.exit(130)
     except Exception as exc:
-        print(f'[ORBIT] 程序出现内部异常（{type(exc).__name__}），本次操作未正常完成。'
+        print(f'[LinuxLab] 程序出现内部异常（{type(exc).__name__}），本次操作未正常完成。'
               '请保留现场，并把这条提示反馈给维护者。', file=sys.stderr)
         if os.environ.get('ORBIT_DEBUG') == '1':
             import traceback

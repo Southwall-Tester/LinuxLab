@@ -15,14 +15,14 @@
 
 ## Windows 用户：双击入口
 
-先把 **Windows 学生版 `orbit-lab-student-windows.zip` 完整解压**到一个普通本地目录，再打开里面的 `orbit-lab` 文件夹；不要直接在压缩包中点击脚本。
+先把 **Windows 学生版 `linuxlab-student-windows.zip` 完整解压**到一个普通本地目录，再打开里面的 `linuxlab` 文件夹；不要直接在压缩包中点击脚本。
 
 1. 第一次使用，双击 **安装环境.cmd**。
 2. 按屏幕提示完成环境准备。依赖已经齐全时会直接检查通过，不重复安装。
-3. 在解压后的 `orbit-lab` 目录复制 `ai.example.json`，将副本命名为 `ai.local.json`；打开副本，填写 `base_url`、`api_key`、`model`，并设置 `enabled: true`。这个方式不需要 Windows 安装 Python，注意不要保存成 `.json.txt`。详见[本地 AI 配置](LOCAL-AI.md)。
+3. 在解压后的 `linuxlab` 目录复制 `ai.example.json`，将副本命名为 `ai.local.json`；打开副本，填写 `base_url`、`api_key`、`model`，并设置 `enabled: true`。这个方式不需要 Windows 安装 Python，注意不要保存成 `.json.txt`。详见[本地 AI 配置](LOCAL-AI.md)。
 4. 保存配置后，双击 **启动实验.cmd**，回答兴趣问题并生成本局情境。学生包不附带维护者的密钥。
 
-离线开始时，在解压后的 `orbit-lab` 目录打开 PowerShell，运行以下命令；把 `Ubuntu` 换成你实际安装的发行版名称：
+离线开始时，在解压后的 `linuxlab` 目录打开 PowerShell，运行以下命令；把 `Ubuntu` 换成你实际安装的发行版名称：
 
 ```powershell
 wsl -d Ubuntu --cd "$PWD" -- bash ./start.sh --new --scene space
@@ -64,7 +64,7 @@ wsl --install -d Ubuntu
 
 ```bash
 bash setup.sh --install
-python3 orbit.py ai init
+python3 linuxlab.py ai init
 # 编辑 ai.local.json，填写模型服务配置并设 enabled 为 true。
 bash start.sh
 ```

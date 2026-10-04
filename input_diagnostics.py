@@ -50,7 +50,7 @@ _VALUE_FLAGS = {'tail': {'-n', '-c', '--lines', '--bytes'},
 _MIN_OPERANDS = {'mkdir': 1, 'rmdir': 1, 'cp': 2, 'mv': 2, 'rm': 1, 'chmod': 2}
 _NAME = re.compile(r'[A-Za-z0-9_.-]{1,64}')
 _SENSITIVE = re.compile(r'(?i)(api[-_]?key|auth|token|code|secret|password|passwd|credential|'
-                        r'\.beacon|(?:^|[-_.])sk[-_]|seal-|link-|evac-|orbit\{|'
+                        r'\.beacon|(?:^|[-_.])sk[-_]|seal-|link-|evac-|(?:orbit|linuxlab)\{|'
                         r'ai\.local|^\.env(?:\.|$)|id_rsa|id_ed25519|state\.json)')
 _SPECIAL = re.compile(r'[\x00-\x20\x7f-\x9f;|&$`()<>{}\[\]*?~\\:]')
 

@@ -1,6 +1,6 @@
-# ORBIT Linux Lab · 情境式实践
+# LinuxLab · 情境式实践
 
-当前正式版本：**2.0.0**。学生包下载见 [GitHub Releases](https://github.com/Southwall-Tester/LinuxLab/releases/latest)。
+当前版本：**2.0.1**。已发布的学生包下载见 [GitHub Releases](https://github.com/Southwall-Tester/LinuxLab/releases/latest)。
 
 一个在 **WSL / Linux 真实终端**中进行情境式实践的中文 Linux 入门 Lab。首次进入时，大模型先问你喜欢什么主题，再为固定的学习任务创作故事与对象名称；本地程序根据任务合同生成文件、组合题面，完成校验与语义复核后进入 Bash。题材可以自由描述，Linux 知识点和检查要求保持一致。
 
@@ -14,7 +14,7 @@
 
 ```bash
 bash setup.sh --install
-python3 orbit.py ai init
+python3 linuxlab.py ai init
 # 编辑生成的 ai.local.json，填写服务地址、密钥、模型并启用后再启动。
 bash start.sh
 ```
@@ -23,7 +23,7 @@ bash start.sh
 
 **首次或新周目：先问兴趣，再生成情境。** 默认 `bash start.sh` 在没有旧周目时调用本地配置的模型，显示一个兴趣问题；你回答主题后，模型为九项任务生成动机、进展与主题对象名称。本地程序编译实际文件名并检查结构，再通过独立请求复核语义；合格后冻结本局实例，建立文件并进入真实 Bash。失败时最多带诊断重新生成一次，仍不合格则中止，保留旧周目。已有周目直接续学，不重新提问，也不因启动续学发送模型请求。`bash start.sh --new` 会重新询问主题，旧周目保留。
 
-先在程序目录创建本地 API 文件：WSL/Linux 用 `python3 orbit.py ai init`；Windows 可直接复制 `ai.example.json` 为 `ai.local.json`，不需要另装 Windows Python。打开该文件，填写 `base_url`、`api_key`、`model` 并设置 `enabled: true`，再启动实验。密钥留在本地文件，不填到命令行。未配置或模型请求失败时会说明原因，不把默认主题冒充为生成结果。详见[配置说明](docs/LOCAL-AI.md)。
+先在程序目录创建本地 API 文件：WSL/Linux 用 `python3 linuxlab.py ai init`；Windows 可直接复制 `ai.example.json` 为 `ai.local.json`，不需要另装 Windows Python。打开该文件，填写 `base_url`、`api_key`、`model` 并设置 `enabled: true`，再启动实验。密钥留在本地文件，不填到命令行。未配置或模型请求失败时会说明原因，不把默认主题冒充为生成结果。详见[配置说明](docs/LOCAL-AI.md)。
 
 需要离线开始时，显式指定本地主题：
 
@@ -71,7 +71,7 @@ exit                退出，下次启动继续
 | 08 辨认进程 | 识别本次实验的探针 | top；可练 tail -f | 本局活进程 PID 与启动身份 |
 | 09 综合交付 | 整理新一轮资料并交付 | 前面命令的综合运用 | 归档内部路径、内容、权限与原件备份 |
 
-上表是固定的教学任务，终端中的故事标题随主题变化。通关后显示本局交付包、`ORBIT{...}` 完成凭证和 `report.json` 的实际路径。新周目有不同的现场数据；不要把源码文档中的示例文件名当作所有主题都相同的名称。
+上表是固定的教学任务，终端中的故事标题随主题变化。通关后显示本局交付包、`LINUXLAB{...}` 完成凭证和 `report.json` 的实际路径；旧周目已生成的完成凭证保留。新周目有不同的现场数据；不要把源码文档中的示例文件名当作所有主题都相同的名称。
 
 ## 情境与任务如何分开
 
@@ -86,6 +86,8 @@ exit                退出，下次启动继续
 ## 文件与运行方式
 
 练习数据默认位于 WSL 的 `~/.local/share/orbit-lab/sessions/`，源码可以留在 Windows 桌面。这样权限关使用 Linux 文件系统的真实权限，不受 `/mnt/c` 挂载选项影响。启动不会改动 `.bashrc`、安装软件或连接评分服务器。
+
+为兼容已有存档和脚本，默认数据目录、`ORBIT_*` 环境变量和内部入口 `orbit.py` 保留原有技术命名；对外名称统一为 LinuxLab，命令入口使用 `linuxlab.py`。
 
 这里使用普通 Bash，支持 Tab 补全、历史、Vim 和原生命令；**不是隔离容器**。请在本局目录里练习。后台探针仅在 `lab load` 时启动，低占用、最多运行 90 秒，通关或退出终端时清理。本关恢复会先把当前站点移到本局 `recovery/`，再复制检查点；按照屏幕提示重新 `cd "$(lab root)"` 即可。
 
@@ -106,8 +108,8 @@ exit                退出，下次启动继续
 - [设计与教师说明](docs/DESIGN.md)：视频分集映射、教学节奏、验收和局限。
 - [来源核对](research/SOURCES.md)：已核实的内容与尚未核实的范围。
 - [验证记录](VALIDATION.md)：本机 WSL 的实际验证结果。
-- **Windows 学生版**：`dist/orbit-lab-student-windows.zip`，解压后可双击安装/启动。
-- **Linux / WSL 学生版**：`dist/orbit-lab-student-linux-wsl.tar.gz`；两者均不含测试通关流程，按使用环境选一个即可。
+- **Windows 学生版**：`dist/linuxlab-student-windows.zip`，解压后进入 `linuxlab` 文件夹，可双击安装/启动。
+- **Linux / WSL 学生版**：`dist/linuxlab-student-linux-wsl.tar.gz`，解压根目录同为 `linuxlab`；两者均不含测试通关流程，按使用环境选一个即可。
 
 `dist/` 是本地生成目录，不随源码提交。维护者在完整源码仓库中进入 WSL/Linux，运行 `python3 tools/package.py` 构建以上学生包，再运行 `python3 tools/verify_handout.py` 验证；发布时把学生包上传为 GitHub Release 附件。普通学生无需执行构建命令。
 

@@ -135,7 +135,7 @@ class AIDiagnosisTest(unittest.TestCase):
                     self.diagnose()
 
     def test_commands_paths_private_echo_and_control_injection_are_rejected(self):
-        unsafe = ['CODE-PRIVATE', 'FAKE-TEST-KEY', 'WORKER-PRIVATE',
+        unsafe = ['CODE-PRIVATE', 'FAKE-TEST-KEY', 'WORKER-PRIVATE', 'LINUXLAB{PRIVATE}',
                   'cp old new', 'ls', '/tmp/example', 'C:\\private', 'example.txt',
                   'echo $(whoami)', '```json', '正文\n下一行', '\x1b[2J', '隐藏\u202e文字',
                   '你不懂隐藏文件。', '你已经掌握权限。', 'stderr显示错误。']

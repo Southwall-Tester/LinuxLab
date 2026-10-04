@@ -31,7 +31,7 @@ inspect_dependencies() {
 inspect_dependencies
 if [[ ${#missing[@]} -eq 0 ]]; then
   printf '依赖已就绪；无需下载或安装。\n'
-  exec env PYTHONUTF8=1 python3 "$APP_DIR/orbit.py" doctor
+  exec env PYTHONUTF8=1 python3 "$APP_DIR/linuxlab.py" doctor
 fi
 printf '需要补齐：%s\n' "${missing[*]}"
 if [[ "$MODE" == '--check' ]]; then
@@ -86,5 +86,5 @@ if [[ ${#missing[@]} -gt 0 ]]; then
   printf '若系统源中的 Python 低于 3.9，请使用 Ubuntu 22.04+ 或 Debian 12+，无需替换系统 Python。\n' >&2
   exit 1
 fi
-env PYTHONUTF8=1 python3 "$APP_DIR/orbit.py" doctor
+env PYTHONUTF8=1 python3 "$APP_DIR/linuxlab.py" doctor
 printf '环境准备完成。在本目录运行 bash start.sh 开始实验。\n'

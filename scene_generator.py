@@ -24,7 +24,7 @@ def _config():
         reason = str(exc).replace('当前使用本地提示', '未生成情境')
         raise SceneGenerationError(
             f'情境生成未开始：{reason}\n'
-            '进入实验前，可在项目目录运行 python3 orbit.py ai init（Windows 用 python），'
+            '进入实验前，可在 WSL/Linux 的项目目录运行 python3 linuxlab.py ai init，'
             '再填写并启用生成的本地 AI 配置；也可以显式选择 --scene space 使用离线情境。'
         ) from None
 

@@ -151,7 +151,7 @@ def _checked_text(value, s, api_key, max_length=440, diagnostic=False):
     """Reject unsafe output without quoting the model's response in an error."""
     if not isinstance(value, str) or not value.strip() or len(value) > max_length:
         raise AIError('AI 解释为空或过长，已改用本地提示。')
-    forbidden = ('lab check', 'ORBIT{', 'SEAL-', 'LINK-', 'EVAC-', '```', '\n', '\r',
+    forbidden = ('lab check', 'ORBIT{', 'LINUXLAB{', 'SEAL-', 'LINK-', 'EVAC-', '```', '\n', '\r',
                  'work/', 'inbox/', 'airlock', 'relay.conf', 'relay.sh', 'station-pulse',
                  'rescue.tar', 'state.json', 'history', 'chmod ', 'mkdir ', 'cp ', 'mv ',
                  'rm ', 'tar ', 'sudo ', 'python ', 'bash ', 'curl ', 'AUTH=', 'CODE=')

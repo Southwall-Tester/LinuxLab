@@ -6,7 +6,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 export PYTHONUTF8=1
-export ORBIT_ENGINE="$APP_DIR/orbit.py"
+export ORBIT_ENGINE="$APP_DIR/linuxlab.py"
 if [[ "${1:-}" == "--doctor" ]]; then
   exec python3 "$ORBIT_ENGINE" doctor
 fi

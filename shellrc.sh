@@ -46,7 +46,7 @@ _orbit_observe_prompt() {
   return "$orbit_status"
 }
 PROMPT_COMMAND=_orbit_observe_prompt
-PS1='\[\e[38;5;45m\]ORBIT\[\e[0m\] \w\n\$ '
+PS1='\[\e[38;5;45m\]LinuxLab\[\e[0m\] \w\n\$ '
 trap 'python3 "$ORBIT_ENGINE" stop --quiet' EXIT
 printf '\n真实 Bash 已就绪。输入 lab 查看任务，lab help 查看帮助，exit 存档退出。\n'
 printf 'lab 及子命令只由本平台实验终端提供，不是 Linux 通用命令。\n'

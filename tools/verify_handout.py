@@ -25,27 +25,27 @@ def main():
     assert student_rules != (ROOT / 'AGENTS.md').read_bytes()
     with zipfile.ZipFile(windows_package) as z:
         assert z.testzip() is None
-        assert set(z.namelist()) == {'orbit-lab/' + n for n in manifest['files']}
+        assert set(z.namelist()) == {'linuxlab/' + n for n in manifest['files']}
         for name, digest in manifest['files'].items():
-            assert hashlib.sha256(z.read('orbit-lab/' + name)).hexdigest() == digest, name
-        assert z.read('orbit-lab/AGENTS.md') == student_rules
-        assert z.read('orbit-lab/docs/STUDENT-AGENTS.md') == student_rules
+            assert hashlib.sha256(z.read('linuxlab/' + name)).hexdigest() == digest, name
+        assert z.read('linuxlab/AGENTS.md') == student_rules
+        assert z.read('linuxlab/docs/STUDENT-AGENTS.md') == student_rules
         assert not any('ai.local' in name or 'learning-notebook' in name for name in z.namelist())
-        example = json.loads(z.read('orbit-lab/ai.example.json'))
+        example = json.loads(z.read('linuxlab/ai.example.json'))
         assert example['enabled'] is False and example['api_key'] == ''
     start = time.monotonic()
-    with tempfile.TemporaryDirectory(prefix='orbit-handout-') as temp:
+    with tempfile.TemporaryDirectory(prefix='linuxlab-handout-') as temp:
         dest = Path(temp)
         with tarfile.open(package) as tar:
             members = list(tar)
-            assert {m.name for m in members} == {'orbit-lab/' + n for n in manifest['files']}
+            assert {m.name for m in members} == {'linuxlab/' + n for n in manifest['files']}
             for m in members:
                 assert m.isfile() and not m.name.startswith('/') and '..' not in Path(m.name).parts
                 p = dest / m.name
                 p.parent.mkdir(parents=True, exist_ok=True)
                 p.write_bytes(tar.extractfile(m).read())
                 p.chmod(m.mode)
-        app = dest / 'orbit-lab'
+        app = dest / 'linuxlab'
         for name, digest in manifest['files'].items():
             assert hashlib.sha256((app / name).read_bytes()).hexdigest() == digest, name
         assert not (app / 'tests').exists()
@@ -99,6 +99,11 @@ def main():
                           'test_pty_repeated_typo_resolution_and_recurrence',
                           'test_repeated_identical_checks_preserve_attempts_but_count_one_problem']
         suite.addTests(test_error_tracking.ErrorTrackingIntegration(name) for name in tracking_names)
+        import test_branding
+        test_branding.APP = app
+        branding_names = ['test_new_entry_resumes_legacy_round_and_preserves_error_handling',
+                          'test_existing_completion_credential_is_preserved_in_renamed_report']
+        suite.addTests(test_branding.BrandingTest(name) for name in branding_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
@@ -107,6 +112,7 @@ def main():
               'packaged_teaching_tests': teaching_names,
               'packaged_scene_tests': scene_names, 'packaged_onboarding_tests': onboarding_names,
               'packaged_tracking_tests': tracking_names,
+              'packaged_branding_tests': branding_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

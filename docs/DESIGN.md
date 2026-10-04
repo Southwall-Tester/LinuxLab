@@ -1,4 +1,4 @@
-# ORBIT 教学设计与教师说明
+# LinuxLab 教学设计与教师说明
 
 ## 按会议意见增加的学习支持
 
@@ -114,7 +114,7 @@
 
 ## 教师使用与验证
 
-Windows 学生版为 `dist/orbit-lab-student-windows.zip`，解压后双击 `安装环境.cmd`，准备好后双击 `启动实验.cmd`；Linux / WSL 学生版为 `dist/orbit-lab-student-linux-wsl.tar.gz`，解压后运行 `bash setup.sh --install`。在程序目录用 `python3 orbit.py ai init` 创建并填写本地配置，再运行 `bash start.sh` 进入兴趣问询流程；离线课堂可显式运行 `bash start.sh --new --scene space` 或指定准备好的场景 JSON。GitHub 附件使用上述 ASCII 文件名，并设置中文下载标签。环境要求见 [SETUP.md](SETUP.md)。参考流程在 `tests/test_lab.py`，不放进学生包。公开教学文件可以在需要时自行增删。
+Windows 学生版为 `dist/linuxlab-student-windows.zip`，解压后进入 `linuxlab` 文件夹，双击 `安装环境.cmd`，准备好后双击 `启动实验.cmd`；Linux / WSL 学生版为 `dist/linuxlab-student-linux-wsl.tar.gz`，解压后在 `linuxlab` 目录运行 `bash setup.sh --install`。在程序目录用 `python3 linuxlab.py ai init` 创建并填写本地配置，再运行 `bash start.sh` 进入兴趣问询流程；离线课堂可显式运行 `bash start.sh --new --scene space` 或指定准备好的场景 JSON。GitHub 附件使用上述 ASCII 文件名，并设置中文下载标签。环境要求见 [SETUP.md](SETUP.md)。参考流程在 `tests/test_lab.py`，不放进学生包。公开教学文件可以在需要时自行增删。
 
 运行 `python3 -m unittest discover -s tests -v` 做 WSL 集成回归。测试使用临时 Linux 目录，调用真实 Bash、GNU 命令、Vim、top 和 CLI，并用 PTY 检查交互启动与 Vim 的真实按键流程。测试数据与用户周目分开，不会消耗学生进度。结果记录在 [VALIDATION.md](../VALIDATION.md)。
 

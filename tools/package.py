@@ -7,7 +7,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['README.md', 'STUDENT.md', 'notes.md', 'AGENTS.md', 'VALIDATION.md',
-         'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'orbit.py', 'lessons.py', 'terminal_notes.py', 'cli_messages.py',
+         'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'linuxlab.py', 'orbit.py', 'lessons.py', 'terminal_notes.py', 'cli_messages.py',
          'knowledge.py', 'learning.py', 'ai_tutor.py', 'activity.py', 'error_patterns.py', 'input_diagnostics.py', 'scenes.py', 'layout.py', 'tasks.py', 'scene_generator.py', 'scene_blueprint.py', 'ai.example.json',
          'scenes/space.json', 'scenes/ocean.json', 'scenes/museum.json', 'scenes/anime.json',
          '启动实验.cmd', '安装环境.cmd', '检查环境.cmd',
@@ -20,23 +20,23 @@ SOURCES = {'AGENTS.md': 'docs/STUDENT-AGENTS.md'}
 def main():
     target = ROOT / 'dist'
     target.mkdir(exist_ok=True)
-    package = target / 'orbit-lab-student-linux-wsl.tar.gz'
+    package = target / 'linuxlab-student-linux-wsl.tar.gz'
     hashes = {}
     with tarfile.open(package, 'w:gz', format=tarfile.PAX_FORMAT) as tar:
         for name in FILES:
             p = ROOT / SOURCES.get(name, name)
             assert p.is_file(), name
             hashes[name] = hashlib.sha256(p.read_bytes()).hexdigest()
-            info = tar.gettarinfo(str(p), arcname='orbit-lab/' + name)
+            info = tar.gettarinfo(str(p), arcname='linuxlab/' + name)
             info.uid = info.gid = 0
             info.uname = info.gname = ''
             info.mode = 0o755 if name.endswith('.sh') else 0o644
             with p.open('rb') as f:
                 tar.addfile(info, f)
-    windows_package = target / 'orbit-lab-student-windows.zip'
+    windows_package = target / 'linuxlab-student-windows.zip'
     with zipfile.ZipFile(windows_package, 'w', zipfile.ZIP_DEFLATED) as z:
         for name in FILES:
-            z.write(ROOT / SOURCES.get(name, name), 'orbit-lab/' + name)
+            z.write(ROOT / SOURCES.get(name, name), 'linuxlab/' + name)
     manifest = {'package': package.name, 'sha256': hashlib.sha256(package.read_bytes()).hexdigest(),
                 'windows_package': windows_package.name,
                 'windows_sha256': hashlib.sha256(windows_package.read_bytes()).hexdigest(),

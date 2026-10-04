@@ -108,6 +108,8 @@ class LabTest(unittest.TestCase):
         self.assertEqual(self.state()['done'], list(range(1, 10)))
         report = json.loads((self.session / 'report.json').read_text())
         self.assertTrue(report['completed'])
+        self.assertEqual(report['lab'], 'LinuxLab')
+        self.assertTrue(report['result'].startswith('LINUXLAB{'))
         self.assertEqual(report['hints']['1'], 3)
         p = subprocess.run([sys.executable, str(APP / 'orbit.py'), 'prepare'], env=self.env,
                            capture_output=True, text=True, check=True)

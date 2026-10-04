@@ -1,4 +1,4 @@
-# ORBIT 学生手册
+# LinuxLab 学生手册
 
 先阅读当前 `lab` 任务，再用 Linux 命令观察和操作。命令用法可以查看原生帮助；本平台另提供 `lab tutor` 逐级求助、`lab notebook` 个人学习手册和 `lab review` 复习。默认新周目会使用本地配置的模型询问兴趣，生成并复核主题；已有周目和显式选择本地情境的练习可离线继续。配置方法和记录范围见[本地 AI 说明](docs/LOCAL-AI.md)。
 
@@ -16,7 +16,7 @@
 
 首次或 `--new` 启动且未指定本地情境时，会先联系配置好的模型，由模型问你想体验什么主题。用一句话回答兴趣，程序生成主题并核对结构，再通过另一次模型请求复核故事与任务的关系，合格后才建立本局文件并进入 Bash。最多按反馈重新生成一次；仍失败会说明原因并保留旧周目。以后直接启动会恢复本局，不再询问兴趣或重新生成。
 
-若提示尚未配置 API，在程序目录运行 `python3 orbit.py ai init`（WSL/Linux），或 `python orbit.py ai init`（已安装 Python 的 Windows），再用文本编辑器填写生成的 `ai.local.json`。需要离线练习可显式运行 `bash start.sh --new --scene space`，也可指定 `ocean`、`museum`、`anime` 或自己的 JSON 文件；这四种内置情境只是示例，不限制你向模型描述其他题材。
+若提示尚未配置 API，在程序目录运行 `python3 linuxlab.py ai init`（WSL/Linux），或 `python linuxlab.py ai init`（已安装 Python 的 Windows），再用文本编辑器填写生成的 `ai.local.json`。需要离线练习可显式运行 `bash start.sh --new --scene space`，也可指定 `ocean`、`museum`、`anime` 或自己的 JSON 文件；这四种内置情境只是示例，不限制你向模型描述其他题材。
 
 `lab scene` 查看情境说明。`lab scene museum` 或 `lab scene 本地文件.json` 只切换本局故事，已有文件名和进度保留，这不算生成了一套新的练习实例；要让实际文件也使用新主题名称，需要退出后在项目目录新建周目。
 

@@ -8,8 +8,8 @@
 
 在程序目录运行以下命令之一，会创建 `ai.local.json` 并显示完整路径：
 
-- WSL/Linux：`python3 orbit.py ai init`
-- 已安装 Python 的 Windows PowerShell：`python orbit.py ai init`
+- WSL/Linux：`python3 linuxlab.py ai init`
+- 已安装 Python 的 Windows PowerShell：`python linuxlab.py ai init`
 - 已在实验终端中：`lab ai init`
 
 已有配置文件不会被覆盖。用文本编辑器打开本地 JSON 文件填写配置，不必把密钥写入命令行。
@@ -28,7 +28,7 @@
 
 默认只接受 HTTPS；本机 `localhost`、`127.0.0.1`、`::1` 可用 HTTP。默认拒绝重定向。需要放到程序目录以外时，可在启动前设置 `ORBIT_AI_CONFIG` 为配置文件路径。不要在地址中放密钥。
 
-`lab ai status` 只检查配置格式，不发送请求，也不显示密钥。进入前可用 `python3 orbit.py ai status`，Windows 对应 `python orbit.py ai status`。配置文件已列入 Git 忽略规则，学生发行包只包含空白示例 `ai.example.json`。Linux 下创建时权限为 600；Windows 挂载盘的访问权限仍由 Windows/挂载设置决定。
+`lab ai status` 只检查配置格式，不发送请求，也不显示密钥。进入前可用 `python3 linuxlab.py ai status`，Windows 对应 `python linuxlab.py ai status`。配置文件已列入 Git 忽略规则，学生发行包只包含空白示例 `ai.example.json`。Linux 下创建时权限为 600；Windows 挂载盘的访问权限仍由 Windows/挂载设置决定。
 
 ## 先问兴趣，再进入真实任务
 

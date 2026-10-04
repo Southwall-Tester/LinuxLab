@@ -76,6 +76,6 @@ try {
     if ($Mode -eq 'Setup') { Write-Host '准备完成。现在可以双击启动实验.cmd。' }
     exit 0
 } catch {
-    Write-Host "[ORBIT] $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[LinuxLab] $($_.Exception.Message)" -ForegroundColor Red
     exit 1
 }
