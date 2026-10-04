@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 from knowledge import CONCEPTS, PHASE_CONCEPTS, diagnosis
+from cli_messages import native_help
 
 
 def stamp():
@@ -85,7 +86,8 @@ def notebook(s, at=None):
                   f'复习作答 {entry["review_attempts"]} 次；当前连续答对 {entry["review_successes"]} 次。',
                   f'首次记录：{entry["first_seen"]}；最近记录：{entry["last_seen"]}。',
                   f'建议复习：{entry["next_review"]}（{due}）。', '',
-                  f'查阅：lab notes {topic["note"]}；小练习：lab review {key}。', '']
+                  '原生帮助：' + native_help(topic['note']) + '。',
+                  f'本平台补充资料：lab notes {topic["note"]}；本平台复习：lab review {key}。', '']
     lines += ['## 最近的诊断', '']
     diagnostics = [e for e in s['events'] if e.get('diagnosis')][-10:]
     for event in diagnostics:

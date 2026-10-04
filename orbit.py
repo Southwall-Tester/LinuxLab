@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from lessons import TITLES, SKILLS, REWARDS, REFLECTIONS, HINTS, CARDS, HELP, brief, explain_options
 from terminal_notes import render_markdown
 from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
-                          unknown_topic, shell_lookup_error, runtime_error)
+                          unknown_topic, shell_lookup_error, runtime_error, LAB_SCOPE, native_help)
 from knowledge import CONCEPTS, PHASE_CONCEPTS, feedback
 import learning
 import ai_tutor
@@ -458,6 +458,7 @@ def validate_relay(root, s):
 
 def show_status(s):
     print(scenes.render(f"\n  ORBIT / 失联空间站    {s['station_id']}    {len(s['done'])}/9", s))
+    print('  ' + LAB_SCOPE)
     print('  ' + '━' * 46)
     for i, (title, reward) in enumerate(zip(TITLES, REWARDS), 1):
         label = '●' if i in s['done'] else '▶' if i == len(s['done']) + 1 else '○'
@@ -549,6 +550,7 @@ def check(session, s, answer):
         item = learning.record_check(s, n, False, code, facts=getattr(e, 'facts', []))
         print('\n[尚未通过] ' + runtime_error(e))
         print(feedback(item))
+        print('也可查原生帮助：' + native_help(CONCEPTS[item['concepts'][0]]['note']))
         print('进度未回退。lab hint 获取提示；lab learn 查命令；误操作可 lab repair。')
         print('针对这次问题：lab tutor；复习记录：lab notebook。')
         return 1
@@ -586,6 +588,8 @@ def show_notes(topic):
         title = part.split('\n', 1)[0]
         sections[title.split()[0]] = (title, '## ' + part.rstrip())
     topic = {'cd': 'navigation', 'pwd': 'navigation', '*': 'glob'}.get(topic, topic)
+    print(LAB_SCOPE)
+    print('中文笔记帮助理解，也鼓励查本机原生帮助：' + native_help(topic) + '\n')
     if topic == 'all':
         print(render_markdown(text))
     elif topic:
@@ -640,6 +644,7 @@ def run_command(args, session, s):
         topic = CONCEPTS[item['concepts'][0]]
         for key in item['concepts']:
             learning.touch_topic(s, key, now())
+        print('本平台助教功能（不是 Linux 通用命令）')
         print(f'助教提示 {level}/3 · {topic["title"]}')
         explanation, source = topic['explanation'], 'local'
         if not args.offline:
@@ -651,7 +656,8 @@ def run_command(args, session, s):
         print(('AI 概念解释：' if source == 'ai' else '本地概念解释：') + explanation)
         print('下一步：' + topic['hints'][level-1])
         print('预期观察：用现场结果确认原因；操作与提交由你完成。')
-        print(f'更多说明：lab notes {topic["note"]}。')
+        print('原生帮助：' + native_help(topic['note']))
+        print(f'本平台中文补充说明：lab notes {topic["note"]}。')
         s['events'].append({'at': now(), 'phase': n, 'result': 'tutor', 'level': level,
                             'concept': item['concepts'][0], 'source': source})
     elif cmd == 'concepts':
@@ -670,7 +676,7 @@ def run_command(args, session, s):
             elif marker.exists():
                 marker.unlink()
             s['tracking_enabled'] = enabled
-        print('本地操作记录：' + ('已开启' if s.get('tracking_enabled') else '已关闭'))
+        print('本平台操作记录：' + ('已开启' if s.get('tracking_enabled') else '已关闭'))
         print('记录实验目录内的命令类别、白名单选项、对象角色、有限文件状态和退出码。')
         print('不保存原始命令、具体路径或值，不记录输出、按键或停顿；可用 lab tracking off 关闭。')
     elif cmd == 'activity':
@@ -678,13 +684,16 @@ def run_command(args, session, s):
     elif cmd == 'scene':
         print(scenes.choose(s, args.name))
     elif cmd == 'notebook':
+        print('本平台个人学习手册；生成的文件也可用 cat 或 less 加文件路径阅读。')
         print(render_markdown(learning.notebook(s)))
         print('手册文件：' + str(save_notebook(session, s)))
     elif cmd == 'review':
+        print('本平台复习功能（不是 Linux 通用命令）')
         print(learning.review(s, args.topic, args.answer))
     elif cmd == 'learn':
         require(n <= 9, '已经通关，可用 lab notes 查命令笔记，或阅读 STUDENT.md。')
         print(CARDS[n-1])
+        print('\n也鼓励查阅原生帮助：' + native_help(CONCEPTS[PHASE_CONCEPTS[n][0]]['note']))
         print('\n更多常用参数及命令名含义：lab notes（例如 lab notes ls），也可阅读 notes.md。')
     elif cmd == 'load':
         require(n == 8, '遥测探针在第八关开放。')

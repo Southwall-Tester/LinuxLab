@@ -2,6 +2,8 @@
 
 Linux 实验和判题仍可离线运行，使用原生 Bash 和 Linux 命令。AI 是按需的概念讲解助手，不负责判题，也不会执行你的命令。
 
+本文中的 `lab`、`lab notes`、`lab tutor`、`lab notebook`、`lab review`、`lab tracking` 等都是本平台功能，不是 Linux 通用命令。`lab notes` 的命令名来源、参数原词、用法与记忆联想保留为中文补充知识；同时鼓励看原生帮助，如 `cp --help`、`man cp`、Bash 的 `help cd` 和 Vim 内的 `:help`。原生手册的可用性取决于本机工具与手册页是否安装。
+
 ## 配置 API
 
 在实验终端运行 `lab ai init`，会在程序目录创建 `ai.local.json`，并显示完整路径。已有文件不会被覆盖。Windows 用户可直接在程序文件夹中，用文本编辑器打开这个 JSON 文件；不必把密钥写入命令行。

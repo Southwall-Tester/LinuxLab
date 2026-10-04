@@ -35,5 +35,7 @@ PROMPT_COMMAND=_orbit_observe_prompt
 PS1='\[\e[38;5;45m\]ORBIT\[\e[0m\] \w\n\$ '
 trap 'python3 "$ORBIT_ENGINE" stop --quiet' EXIT
 printf '\n真实 Bash 已就绪。输入 lab 查看任务，lab help 查看帮助，exit 存档退出。\n'
+printf 'lab 及子命令只由本平台实验终端提供，不是 Linux 通用命令。\n'
+printf '也鼓励查原生帮助：ls --help、man ls；Bash 用 help cd；Vim 内用 :help。\n'
 printf '练习文件位于 %s/station；这是普通 Shell，命令也能访问其他目录。\n' "$ORBIT_HOME"
 lab

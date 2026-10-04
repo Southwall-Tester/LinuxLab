@@ -1,5 +1,9 @@
 # 来源核对
 
+## 原生帮助与平台边界（2026-10-04）
+
+对照本机 WSL 的 `help help`、`ls --help`、`man -w cp`、`man -w bash` 核对帮助入口；Bash 内置 `help` 的说明见 [GNU Bash 官方手册](https://www.gnu.org/software/bash/manual/html_node/Bash-Builtins.html)，GNU 工具选项见 [GNU Coreutils 手册](https://www.gnu.org/software/coreutils/manual/coreutils.html)。原生帮助的实际可用性取决于工具、Shell 和手册页安装情况。`lab notes` 等是本平台的中文补充与教学功能，不宣称其在其他环境通用。
+
 ## 本地可选 AI 接口（2026-10-04）
 
 接口格式参考 [DeepSeek Chat Completions 官方文档](https://api-docs.deepseek.com/api/create-chat-completion/)：以 JSON messages 发起对话补全，使用 Bearer 认证。实现接受用户本地配置的兼容服务，实际服务与模型可用性由用户配置决定。本轮以本机 HTTP 测试服务验证协议和回退，没有使用真实付费 API，也没有验证生成式讲解的教学效果。

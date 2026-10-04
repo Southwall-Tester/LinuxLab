@@ -3,6 +3,24 @@ import argparse
 import difflib
 import shlex
 
+LAB_SCOPE = '使用范围：lab 及其子命令仅由本平台的实验终端提供，不是 Linux 通用命令；换到其他环境不能默认使用。'
+
+
+def native_help(topic=''):
+    """Recommend native documentation without replacing any native command."""
+    if topic in ('cd', 'pwd', 'exit', 'help', 'history'):
+        return f'help {topic}（Bash 内置帮助）'
+    if topic == 'navigation':
+        return 'help cd 或 help pwd（Bash 内置帮助）'
+    if topic in ('glob', '*'):
+        return 'man bash，查阅文件名展开（Pathname Expansion）'
+    if topic == 'vim':
+        return 'Vim 内用 :help 查编辑操作；终端用 vim --help 或 man vim 查启动用法'
+    if topic in ('ls', 'mkdir', 'cp', 'mv', 'rm', 'tar', 'cat', 'tail', 'head',
+                 'chmod', 'top', 'grep', 'find', 'du', 'df', 'less', 'man'):
+        return f'{topic} --help；man {topic}'
+    return '外部命令如 cp --help、man cp；Bash 内置命令如 help cd；Vim 内用 :help'
+
 
 USAGE = {
     'mission': 'lab（查看当前任务，不需要再加参数）',
@@ -10,7 +28,7 @@ USAGE = {
     'help': 'lab help（查看帮助，不需要再加参数）',
     'root': 'lab root（查看站点路径，不需要再加参数）',
     'learn': 'lab learn（查看本关用法，不需要再加参数）；查某个命令请用 lab notes 命令名',
-    'notes': 'lab notes（查看目录），或 lab notes 命令名（一次查询一个，如 lab notes tail）',
+    'notes': 'lab notes（本平台中文笔记目录），或 lab notes 命令名（一次查询一个，如 lab notes tail）；也鼓励查原生命令帮助，如 tail --help、man tail',
     'hint': 'lab hint（逐级提示），或 lab hint 1、lab hint 2、lab hint 3；级别只能是 1、2、3',
     'check': 'lab check，或 lab check 答案（最多一个答案；是否需要答案以本关任务为准）',
     'load': 'lab load（启动本局探针，不需要再加参数）',
@@ -63,7 +81,8 @@ def unknown_lab_command(command, rest):
     if command in SHELL_COMMANDS and command != 'lab':
         return (f'{command} 是终端命令，前面不用加 lab。\n'
                 '如果要执行它，请重新输入：' + shlex.join([command, *rest]) + '\n'
-                f'如果要查用法，请输入：lab notes {command}')
+                '原生用法帮助：' + native_help(command) + '\n'
+                f'本平台中文补充笔记：lab notes {command}')
     if command == 'lab':
         return 'lab 重复输入了；只需一个 lab。输入 lab help 查看写法。'
     suggestion = closest(command, PUBLIC_COMMANDS)
@@ -81,7 +100,8 @@ def runtime_error(error):
     if isinstance(error, FileNotFoundError):
         return f'找不到文件或目录：{path}。请核对当前位置、名称和大小写。'
     if isinstance(error, PermissionError):
-        return f'没有权限访问：{path}。请检查文件及所在目录的权限，可用 lab notes chmod 查用法。'
+        return (f'没有权限访问：{path}。请检查文件及所在目录的权限。'
+                '原生帮助：chmod --help 或 man chmod；本平台中文笔记：lab notes chmod。')
     if isinstance(error, IsADirectoryError):
         return f'这里需要文件，但路径指向了目录：{path}。请核对文件名和目录层级。'
     if isinstance(error, NotADirectoryError):

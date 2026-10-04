@@ -19,6 +19,10 @@ bash start.sh
 
 进入后直接输入 Linux 命令。第一关会告诉你第一步；输入 `lab` 重看任务。
 
+**使用范围：`lab` 及其子命令（包括 `lab notes`、`lab tutor`、`lab notebook`、`lab review`、`lab tracking`）由本平台实验终端提供，不是 Linux 通用命令；换到其他环境不能默认使用。**
+
+`lab notes` 保留为中文补充知识入口，解释命令名的英文来源、参数原词、用法和记忆联想。同时鼓励查阅工具自带的帮助，例如 `cp --help`、`man cp`，Bash 内置命令用 `help cd`，Vim 编辑器内用 `:help`。这些帮助入口取决于具体工具和环境；`man` 需要本机安装工具及对应手册页。
+
 ```text
 lab                 当前任务
 lab learn           本关命令速查
