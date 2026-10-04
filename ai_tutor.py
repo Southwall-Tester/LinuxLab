@@ -9,6 +9,7 @@ import urllib.parse
 import urllib.request
 
 from knowledge import CONCEPTS
+import layout
 
 APP = Path(__file__).resolve().parent
 TEMPLATE = {'enabled': False, 'base_url': 'https://api.deepseek.com',
@@ -77,7 +78,7 @@ def status():
         lines.append('AI 已启用且配置格式有效（未发送请求，未验证服务连通性）。')
     except AIError as e:
         lines.append(str(e))
-    lines.append('仅 lab tutor 主动联网；lab tutor --offline 使用本地提示。密钥不会显示或写入报告。')
+    lines.append('新周目兴趣问询、情景生成及 lab tutor 使用此配置；显式 --scene 可离线开始，lab tutor --offline 使用本地提示。密钥不会显示或写入报告。')
     return '\n'.join(lines)
 
 
@@ -104,12 +105,17 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def request_json(config, messages):
+def request_json(config, messages, max_tokens=600):
     endpoint = config['base_url'].rstrip('/')
     if not endpoint.endswith('/chat/completions'):
         endpoint += '/chat/completions'
-    body = json.dumps({'model': config['model'], 'messages': messages,
-                       'stream': False, 'max_tokens': 600}, ensure_ascii=False).encode('utf-8')
+    payload = {'model': config['model'], 'messages': messages,
+               'stream': False, 'max_tokens': max_tokens}
+    # DeepSeek's current models default to thinking mode. These short structured
+    # calls need a bounded final JSON response, not a reasoning-token stream.
+    if urllib.parse.urlsplit(endpoint).hostname == 'api.deepseek.com':
+        payload.update(thinking={'type': 'disabled'}, response_format={'type': 'json_object'})
+    body = json.dumps(payload, ensure_ascii=False).encode('utf-8')
     request = urllib.request.Request(endpoint, data=body, headers={
         'Content-Type': 'application/json', 'Authorization': 'Bearer ' + config['api_key'],
     })
@@ -127,9 +133,15 @@ def request_json(config, messages):
         if not isinstance(content, str):
             raise ValueError()
         return json.loads(content)
+    except AIError:
+        raise
     except urllib.error.HTTPError as e:
         e.close()
         raise AIError(f'AI 服务返回 HTTP {e.code}，请核对本地配置或稍后再试；已改用本地提示。') from None
+    except TimeoutError:
+        raise AIError('AI 请求超时，请检查网络或本地 timeout_seconds 设置；已改用本地提示。') from None
+    except json.JSONDecodeError:
+        raise AIError('AI 回复不是所需 JSON 格式，已改用本地提示。') from None
     except (OSError, ValueError, KeyError, IndexError, TypeError, http.client.HTTPException):
         raise AIError('AI 请求失败、超时或回复格式无效，已改用本地提示。') from None
 
@@ -170,6 +182,7 @@ def explain(s, item, level, question):
                  'rm ', 'tar ', 'sudo ', 'python ', 'bash ', 'curl ', 'AUTH=', 'CODE=')
     if (any(v in text for v in private_values(s) + [config['api_key']])
             or any(v.lower() in text.lower() for v in forbidden)
+            or any(value.lower() in text.lower() for value in layout.bindings(s).values())
             or re.search(r'\d|[;&|`<>]|[\x00-\x1f\x7f-\x9f]', text)):
         raise AIError('AI 回复超出概念解释范围，已改用本地提示。')
     return text.strip()

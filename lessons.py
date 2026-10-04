@@ -1,5 +1,7 @@
 """Original Chinese teaching material. No network or third-party packages."""
 from cli_messages import LAB_SCOPE, native_help
+import scenes
+from tasks import requirements
 
 # A single wording source for terminal hints, command cards and feedback.
 # Mnemonics are explicitly distinguished from actual long-option names.
@@ -41,12 +43,14 @@ def explain_options(text, *keys):
     notes = '\n'.join('  · ' + OPTION_HELP[key] for key in dict.fromkeys(keys))
     return text + '\n参数与用法说明：\n' + notes
 
-TITLES = ['找到气闸', '保存黑匣子', '清理假信号', '打开救援舱', '读懂最后一条消息',
-          '修复中继配置', '交还启动权限', '辨认正在运行的进程', '最后一次投递']
+# Compatibility names for integrations that only need the fixed skill sequence.
+# Student-facing story titles and rewards come from scenes.get(state).
+TITLES = ['定位与目录', '完整备份', '整理文件', '恢复归档', '辨认有效记录',
+          '编辑配置', '设置权限与执行', '辨认进程', '综合交付']
 SKILLS = ['cd · ls · mkdir', 'cp', 'mv · rm · * 通配符', 'tar · cat', 'cat · tail',
           'vim', 'chmod · ls', 'top', '综合：复制、移动、删除、编辑、权限、归档']
-REWARDS = ['位置锁定', '黑匣子保全', '导航恢复', '救援舱解封', '通信频率确认',
-           '中继配置恢复', '中继启动', '遥测恢复', '全员获救']
+REWARDS = ['位置确认', '备份完成', '整理完成', '归档恢复', '有效记录确认',
+           '配置完成', '执行成功', '进程确认', '交付完成']
 REFLECTIONS = [
     '以 . 开头的名字默认不被 ls 显示；cd 切换目录；mkdir 创建目录。',
     '复制会保留原件；完整的目录备份应包含隐藏文件和子目录，文件层级也要正确。',
@@ -61,76 +65,12 @@ REFLECTIONS = [
 
 
 def brief(n, s):
-    station = s['station_id']
-    cleanup_goal = (
-        '导航队列混入了一批假信号，真正的航线也被错误命名。\n'
-        '清理规则：只删除 inbox 中名称以 decoy- 开头、以 .tmp 结尾的所有普通文件。\n'
-        '除下述需要移动的航线外，保留其他文件及其内容，包括名单、识别指南、传感器缓存和隐藏缓存。\n'
-        '这次练习按名称规律批量选择文件：尝试用 * 表达规则，操作前先查看匹配范围。'
-        if s.get('cleanup_version', 0) >= 1 else
-        '导航队列混入了两份假信号，真正的航线也被错误命名。\n'
-        '只删除 inbox 中的 decoy-a.tmp 和 decoy-b.tmp，保留 crew.csv。\n'
-        '也可以尝试用 * 按共同名称规律选择这两个文件，操作前先查看匹配范围。')
-    tasks = [
-        f'''你在失联空间站 {station} 醒来。气闸 airlock 内的定位终端还在闪烁。
-终端传来提示：“先找到气闸里的隐藏信标。接下来收到的航线等线索，需要统一
-保存在工作区 work 的 evidence 目录里，方便后续修复时查阅。本关先准备好这个
-目录，收到线索后再放进去。
-本次定位必须在气闸内现场确认。准备好后，请回到 airlock，再提交检查。”
-
-空间站根目录是 station。本关需要完成三件事：
-1. 进入 airlock，找出隐藏的 .beacon-XXXX 信标，记下四位数字。
-2. 在 station/work 下创建 evidence 目录，作为后续航线等线索的存放处；本关先建好空目录即可。
-3. 如果离开了气闸，必须先回到 station/airlock，再运行 lab check 提交。
-第一步可以试试 ls，接下来由你探索。
-提交位置：station/airlock（不能在 work 或 evidence 里提交本关）。
-提交命令：lab check 四位数字（请把“四位数字”替换成你发现的数字）。
-检查会同时确认：信标数字正确、work/evidence 已建立、你当前位于 airlock。''',
-        '''救援终端：“接下来会动设备。先保存黑匣子，别让原始记录消失。”
-目标：完整复制 station/blackbox 目录为 station/work/backup。
-包括隐藏的校验文件和子目录；blackbox 原件不能丢失或被改动。
-注意最终层级是 work/backup/boot.log，不是 work/backup/blackbox/boot.log。
-提交：lab check。现在不需要再输入信标数字。''',
-        f'''{cleanup_goal}
-目标：把 station/inbox/route.pending 移动并改名为 station/work/evidence/route.txt；
-移动后原位置不应再有 route.pending。
-提交：lab check。''',
-        '''你收到密封救援舱 supplies/rescue.tar.gz。里面有恢复中继所需的文件。
-目标：舱内文件完整恢复到 station/work/recovered，保持原始内容，不能多套一层目录。
-清单 manifest.txt 记录了本舱的密封码 SEAL，需要你找到它以确认救援舱身份。
-提交：lab check 密封码。''',
-        '''通信记录中混杂着旧指令和状态消息，过期授权无法恢复中继。
-目标：确定当前有效的授权码 CODE，并记下配套的频道 CHANNEL，供后续修复使用。
-手头资料：station/work/evidence/route.txt 和 station/logs/comms.log。
-提交：lab check 当前有效的授权码。''',
-        f'''中继配置 work/recovered/relay.conf 仍停留在维护状态。
-目标：配置中的 MODE=rescue，CHANNEL 和 AUTH 分别对应上一关确认的频道与授权码。
-STATION={station} 必须保留；配置只包含这四个字段，每个字段各出现一次。
-提交：lab check。以保存后的配置为准。''',
-        '''配置正确，但启动脚本被撤掉了执行权限。
-目标：work/recovered/relay.sh 仅允许所有者读、写、执行；
-同目录的 relay.conf 仅允许所有者读、写。两者都不允许组用户和其他用户访问，也不设置特殊权限位。
-通过该脚本启动中继，取得它生成的 receipt.txt 回执；保留脚本原始内容。
-提交：lab check。只改权限、没有启动成功还不能通过。''',
-        '''中继上线了，但你还要从正在运行的进程中认出遥测探针。
-先运行 lab load，它会启动最多 90 秒、低占用的练习进程 station-pulse。
-目标：从系统中辨认出本局正在运行的 station-pulse，确定它的进程编号 PID。
-提交：lab check 这个PID。必须是本局仍然存活的探针，旧 PID 无效。
-若已超时，可以重新 lab load。''',
-        f'''最终救援窗口已开启。这次只给交付要求，由你决定命令顺序。
-可用资料：finale/capsule.tar.gz 中的配置草稿、finale/final.log 中的救援通信记录，
-以及 inbox/crew.csv 名单和 work/recovered/receipt.txt 中继回执。
-
-交付物：work/rescue.tar.gz。包内恰有以下三个普通文件（可包含 dispatch 目录条目）：
-  dispatch/relay.conf —— MODE=evacuate，STATION={station}；CHANNEL 和 AUTH
-  对应最新 FINAL 指令。仅所有者可读写，其余用户无权限，不设置特殊权限位。
-  dispatch/crew.csv —— 本局完整船员名单。
-  dispatch/receipt.txt —— 本局有效中继回执。
-配置只包含上述四个字段，每个字段各出现一次。归档不能夹带草稿或其他文件。
-保留 work/backup 黑匣子备份。提交：lab check。
-成功后将生成救援凭证和可分享的 JSON 通关报告。''',
-    ]
-    return tasks[n-1]
+    task = requirements(n, s)
+    scene = scenes.get(s)
+    introduction = scene['introductions'][n - 1]
+    parts = [scene['background']] if n == 1 else []
+    parts.extend([introduction, task])
+    return '\n\n'.join(part for part in parts if part)
 
 
 HINTS = [
@@ -217,8 +157,8 @@ lab check [答案]     检查当前关；失败会指出具体缺项，可以重
 lab hint [1|2|3]    逐级提示：方向 → 方法 → 命令骨架（每关单独记录）
 lab learn           当前关的命令速查
 lab notes [命令]    命令名与参数笔记目录；例如 lab notes ls；all 查看全文
-lab status          查看九个系统和通关记录
-lab root            显示站点根目录；迷路可用 cd "$(lab root)"
+lab status          查看九关任务和通关记录
+lab root            显示实验根目录；迷路可用 cd "$(lab root)"
 lab load            第八关启动一个限时练习进程
 lab stop            停止本局练习进程
 lab repair          备份整个现场，并恢复到当前关开始时的文件状态
@@ -230,13 +170,17 @@ lab review          查看复习清单；lab review 知识点 看题，再加 A/
 lab ai init         创建本地 API 配置；lab ai status 只检查格式，不发送请求
 lab tracking on/off  开关本地操作记录（默认关闭，记录命令语义、有限状态与退出码）
 lab activity         查看最近操作记录；不记录参数、输出或按键
-lab scene            查看可选情境；lab scene ocean 选择海洋主题
+lab scene            查看可选情境和当前选择
+lab scene 名称/本地JSON文件  切换完整叙事；现有周目的文件名保持，避免移动学生文件
+lab scene --generate "任意主题" [--output 路径]  按新主题另行生成可复用的本地情境 JSON
 exit                保存退出；再次 bash start.sh 自动续玩
 新周目：退出后 bash start.sh --new；new 是“新建”，显式指定才新开一局，默认续玩；旧文件保留
+首次进入或新周目：先回答想学的主题，由已配置的模型生成情境与题面，再开始练习；续玩不重问
+离线选择：bash start.sh --new --scene 名称/JSON文件，按已有情境及其文件命名启动新周目
 
-各任务中的 station/... 均指站点根目录内的路径，不是要求你反复创建 station。
+各任务中的实验根目录名称指本局根目录，不是要求你反复创建同名目录。
 每关完成后自动保存检查点。hint 不扣分，失败不回档；没有倒计时和爆炸惩罚。
 记录检查、提示、复习与时间；不截取终端输出。Bash 历史仅存在本局目录。
 lab 是本实验的辅助命令；ls、cp、vim 等保持原生 Linux 行为。
-仅主动使用 lab tutor 且启用本地 API 配置时联网；不上传存档或终端历史。
+新周目的主题生成、lab scene --generate 和启用 API 的 lab tutor 会使用本地 API 配置联网；不上传存档或终端历史。
 真实 Shell 不是隔离容器，请在练习目录内操作。'''

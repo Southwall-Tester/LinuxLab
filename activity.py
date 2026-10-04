@@ -5,6 +5,7 @@ import shlex
 from pathlib import Path
 
 from learning import stamp
+import layout
 
 COMMANDS = {'ls', 'pwd', 'cd', 'mkdir', 'cp', 'mv', 'rm', 'tar', 'cat', 'tail',
             'head', 'vim', 'chmod', 'top', 'grep', 'find'}
@@ -18,7 +19,7 @@ ROLES = {'blackbox': 'original', 'work/backup': 'backup',
          'supplies': 'supplies', 'finale': 'finale'}
 
 
-def role(path, cwd, root):
+def role(path, cwd, root, s=None):
     # Path.resolve follows links only for role classification; never opens their targets.
     # Remove a simple trailing glob to identify its parent role.
     path = path.split('*', 1)[0] if '*' in path else path
@@ -26,17 +27,18 @@ def role(path, cwd, root):
         relative = (Path(cwd) / path).resolve().relative_to(root.resolve()).as_posix()
     except (OSError, ValueError, RuntimeError):
         return 'outside'
-    for prefix, name in sorted(ROLES.items(), key=lambda item: len(item[0]), reverse=True):
+    roles = {layout.rel(s or {}, prefix): name for prefix, name in ROLES.items()}
+    for prefix, name in sorted(roles.items(), key=lambda item: len(item[0]), reverse=True):
         if relative == prefix or relative.startswith(prefix + '/'):
             return name
     return 'other'
 
 
-def scene_facts(root):
+def scene_facts(root, s=None):
     """Small allowlisted observation, not a grader; never follows symlinks."""
     def ordinary(rel):
         p = root
-        for part in Path(rel).parts:
+        for part in Path(layout.rel(s or {}, rel)).parts:
             p = p / part
             if p.is_symlink():
                 return False
@@ -45,9 +47,9 @@ def scene_facts(root):
             'backup_nested_present': ordinary('work/backup/blackbox/boot.log')}
 
 
-def config_fingerprint(root):
+def config_fingerprint(root, s=None):
     p = root
-    for part in ('work', 'recovered', 'relay.conf'):
+    for part in Path(layout.rel(s or {}, 'work/recovered/relay.conf')).parts:
         p = p / part
         if p.is_symlink():
             return None
@@ -86,17 +88,17 @@ def record(s, session, line, exit_code, cwd, dotglob=False):
                 else:
                     known_options = False
             else:
-                operands.append(role(word, cwd, root))
+                operands.append(role(word, cwd, root, s))
                 raw_operands.append(word)
     event = {'at': stamp(), 'phase': min(len(s['done']) + 1, 9),
              'command': command, 'exit_code': exit_code, 'flags': flags,
-             'operand_roles': operands, 'known_options': known_options, 'facts': scene_facts(root)}
+             'operand_roles': operands, 'known_options': known_options, 'facts': scene_facts(root, s)}
     # Conservative: quoted/mixed syntax remains unknown, as do complex commands.
     event['plain_star_excludes_hidden'] = (command == 'cp' and not dotglob
         and '*' in line and not any(c in line for c in ('"', "'", '{', '}', '?', '[', ']'))
-        and any(Path(word).name.startswith('*') and role(word, cwd, root) == 'original'
+        and any(Path(word).name.startswith('*') and role(word, cwd, root, s) == 'original'
                 for word in raw_operands[:-1]))
-    fingerprint = config_fingerprint(root)
+    fingerprint = config_fingerprint(root, s)
     previous = s.get('last_observed_config')
     event['config_changed_since_observation'] = (fingerprint is not None and previous is not None
                                                   and fingerprint != previous)

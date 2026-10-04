@@ -81,12 +81,25 @@ def main():
                           'test_scene_switch_preserves_files_and_assessment',
                           'test_missing_config_falls_back_without_executing_question']
         suite.addTests(test_teaching.TeachingIntegration(name) for name in teaching_names)
+        import test_scenes
+        test_scenes.APP = app
+        scene_names = ['test_anime_full_real_command_walkthrough',
+                       'test_arbitrary_json_full_walkthrough_and_archive_permissions',
+                       'test_compiled_blueprint_material_and_native_path_workflow',
+                       'test_scene_snapshot_switch_repair_and_resume']
+        suite.addTests(test_scenes.SceneIntegration(name) for name in scene_names)
+        import test_scene_onboarding
+        test_scene_onboarding.APP = app
+        onboarding_names = ['test_real_launcher_interviews_generates_then_resumes_without_api',
+                            'test_failed_new_generation_preserves_existing_round_and_pointer']
+        suite.addTests(test_scene_onboarding.SceneOnboardingTest(name) for name in onboarding_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
               'windows_package_sha256': manifest['windows_sha256'],
               'packaged_integration_tests': names, 'passed': True,
               'packaged_teaching_tests': teaching_names,
+              'packaged_scene_tests': scene_names, 'packaged_onboarding_tests': onboarding_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

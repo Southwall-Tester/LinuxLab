@@ -10,11 +10,7 @@ export ORBIT_ENGINE="$APP_DIR/orbit.py"
 if [[ "${1:-}" == "--doctor" ]]; then
   exec python3 "$ORBIT_ENGINE" doctor
 fi
-if [[ $# -gt 1 || ( $# -eq 1 && "$1" != '--new' ) ]]; then
-  printf '用法：bash start.sh [--new | --doctor]\n' >&2
-  exit 2
-fi
-ORBIT_HOME="$(python3 "$ORBIT_ENGINE" prepare "$@")"
+ORBIT_HOME="$(python3 "$ORBIT_ENGINE" prepare --interactive "$@")"
 export ORBIT_HOME
 cd -- "$ORBIT_HOME/station"
 exec bash --noprofile --rcfile "$APP_DIR/shellrc.sh" -i

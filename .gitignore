@@ -26,3 +26,4 @@ ai.local.json
 ai.local.*.json
 learning-notebook.md
 tracking.enabled
+scenes/generated-*.json

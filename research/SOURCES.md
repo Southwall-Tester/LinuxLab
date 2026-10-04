@@ -6,9 +6,25 @@
 
 ## 本地可选 AI 接口（2026-10-04）
 
-接口格式参考 [DeepSeek Chat Completions 官方文档](https://api-docs.deepseek.com/api/create-chat-completion/)：以 JSON messages 发起对话补全，使用 Bearer 认证。实现接受用户本地配置的兼容服务，实际服务与模型可用性由用户配置决定。本轮以本机 HTTP 测试服务验证协议和回退，没有使用真实付费 API，也没有验证生成式讲解的教学效果。
+接口格式参考 [DeepSeek Chat Completions 官方文档](https://api-docs.deepseek.com/api/create-chat-completion/)：以 JSON messages 发起对话补全，使用 Bearer 认证。实现接受用户本地配置的兼容服务，实际服务与模型可用性由用户配置决定。本机模拟服务用于验证协议与失败处理，真实服务试验结果另见 [VALIDATION.md](../VALIDATION.md)；配置检查或服务连通均不能证明生成式讲解的教学效果。
 
 知识点关联、操作证据规则和 1/7/30 天复习安排是本项目的工程设计，不是已证实的认知诊断模型或经实测的遗忘曲线。
+
+## 兴趣情境、任务变式与生成质量（2026-10-04）
+
+本次直接查阅下列论文正文及项目官方文档。论文发现不直接等同于本项目的实现效果；每项列出适用范围，避免只选有利证据。
+
+| 原始来源 | 实际发现或机制 | 限制及本项目用途 |
+| --- | --- | --- |
+| Walkington（2013），[Using Adaptive Learning Technologies to Personalize Instruction to Student Interests: The Impact of Relevant Contexts on Performance and Learning Outcomes](https://www.researchgate.net/publication/263936546_Using_Adaptive_Learning_Technologies_to_Personalize_Instruction_to_Student_Interests_The_Impact_of_Relevant_Contexts_on_Performance_and_Learning_Outcomes)，DOI 10.1037/a0031882，作者公开全文 | 145名九年级学生的随机分组研究中，兴趣匹配组在较难的代数列式任务上更准确、高效，后续非个性化单元仍观察到优势 | 不是Linux或任意LLM剧情实验；兴趣等中介机制未直接测量。支持研究有意义的情境关系，不证明换词有效 |
+| Harp 与 Mayer（1998），[How Seductive Details Do Their Damage: A Theory of Cognitive Interest in Science Learning](https://www.researchgate.net/publication/232595492_How_Seductive_Details_Do_Their_Damage_A_Theory_of_Cognitive_Interest_in_Science_Learning)，作者公开全文 | 四项实验中，有趣但与核心解释无关的材料降低主要内容回忆与问题解决迁移 | 使用单篇科学教材、限时阅读和低先备知识成人，不能概括为一切故事有害。提示删去与操作目的无关的剧情 |
+| Gentner、Loewenstein 与 Thompson（2003），[Learning and Transfer: A General Role for Analogical Encoding](https://groups.psych.northwestern.edu/gentner/papers/GentnerLoewensteinThompson03.pdf)，作者实验室PDF | 谈判学习实验中，显式比较案例促进共同结构提取与迁移；第二项实验迁移比例48%对19% | 任务为谈判，非终端操作。用于提出跨情境结构比较的后续验证，不宣称本Lab已有同样收益 |
+| [PrairieLearn：server.py与题目生命周期](https://docs.prairielearn.com/question/server/)，官方文档 | 区分generate、render、parse、grade等阶段，以params和correct_answers维护变式数据 | 工程文档而非教学效果研究。借鉴生成、渲染、评分职责分离，不照搬其可自定义判分代码的全部能力 |
+| [STACK：Deploying](https://docs.stack-assessment.org/en/STACK_question_admin/Deploying/)，官方文档 | 建议先生成、测试再部署变式，记录实例种子；进行中的测验不应改变随机生成逻辑 | 文档明确测试受覆盖范围限制，变式公平性需实际使用数据。支持先检查和冻结实例，不保证各主题难度等值 |
+| Yadav、Tseng 与 Ni（2023），[Contextualizing Problems to Student Interests at Scale in Intelligent Tutoring System Using Large Language Models](https://arxiv.org/abs/2306.00190)，原始论文 | CTAT原型用GPT-4改写情境，提示约束保留数值、原问题意图，并提供作者预览编辑 | 属提示工程与工具探索；学习效果系统研究列为未来工作，涉及图形的问题仍有局限。不能当作已完成的教学实验证据 |
+| Logacheva等（ICER 2024），[Evaluating Contextually Personalized Programming Exercises Created with Generative AI](https://arxiv.org/abs/2407.11994)，原始论文 | 对283道生成编程题评估：96.1%匹配主题，87.6%匹配概念，54.4%难度合适；学生偏好选择主题 | 单机构自定进度选修课，64%属浅层个性化；质量、主观反馈和使用行为不是迁移增益的因果验证。提示分别检查主题、概念和难度 |
+
+本项目的工程推论：用稳定任务合同保护目标和可观测证据；模型只填语义对象和任务动机；本地编译控制结构与判题；生成后做结构检查和独立语义复核，失败只允许一次带诊断重生成；通过后冻结实例及合同版本/hash。这一整套流程并非上述来源已验证的方法，模型复核也可能漏判。论文中的兴趣、满意度、当前作答表现和技能迁移不能互换，真实学生效果仍需另行研究。
 
 核对日期：2026-09-30。以下区分直接读取的事实与本项目自己的设计选择。
 

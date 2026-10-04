@@ -42,7 +42,7 @@ USAGE = {
     'ai': 'lab ai init（创建本地 API 配置），或 lab ai status（只检查配置格式）',
     'tracking': 'lab tracking [on|off|status]（开启、关闭或查看本地操作记录状态）',
     'activity': 'lab activity（查看最近的本地操作记录）',
-    'scene': 'lab scene [space|ocean|museum]（选择情境，知识点和检查标准不变）',
+    'scene': 'lab scene [主题名或JSON文件]；lab scene --generate "兴趣主题" [--output 文件.json]；配套文件命名的新周目用 bash start.sh --new --scene 主题或JSON文件',
     'prepare': '在项目目录运行 bash start.sh；新局用 bash start.sh --new',
     'doctor': '在项目目录运行 bash start.sh --doctor',
     'relay': '在第七关按任务说明运行中继脚本，不需要给 lab relay 加参数',

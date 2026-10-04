@@ -16,7 +16,7 @@ import tarfile
 import time
 from datetime import datetime, timezone
 
-from lessons import TITLES, SKILLS, REWARDS, REFLECTIONS, HINTS, CARDS, HELP, brief, explain_options
+from lessons import SKILLS, REFLECTIONS, HINTS, CARDS, HELP, brief, explain_options
 from terminal_notes import render_markdown
 from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
                           unknown_topic, shell_lookup_error, runtime_error, LAB_SCOPE, native_help)
@@ -25,6 +25,9 @@ import learning
 import ai_tutor
 import activity
 import scenes
+import layout
+import scene_generator
+import tasks
 
 APP = Path(__file__).resolve().parent
 VERSION = '1.1.0-dev'
@@ -81,13 +84,22 @@ def write(root, rel, text, mode=0o644):
     p.chmod(mode)
 
 
-def content(root, rel, code='file'):
-    p = safe_path(root, rel)
+def task_path(root, s, rel):
+    return safe_path(root, layout.rel(s, rel))
+
+
+def task_write(root, s, rel, text, mode=0o644):
+    write(root, layout.rel(s, rel), text, mode)
+
+
+def content(root, rel, code='file', s=None):
+    s = s or {}
+    p = task_path(root, s, rel)
     if not p.is_file() or p.stat().st_size > 65536:
         facts = []
         if not p.exists() and Path(rel).name.startswith('.'):
             facts.append('hidden_missing')
-        if code == 'backup' and activity.scene_facts(root)['backup_nested_present']:
+        if code == 'backup' and activity.scene_facts(root, s)['backup_nested_present']:
             facts.append('nested_backup')
         raise LabError(f'文件缺失、类型不对或过大：{rel}', code, facts)
     return p.read_text(encoding='utf-8')
@@ -100,7 +112,7 @@ def require(condition, message, code='unknown'):
 
 def cfg(s, final=False, initial=False):
     return (f"STATION={s['station_id']}\n"
-            f"MODE={'maintenance' if initial else 'evacuate' if final else 'rescue'}\n"
+            f"MODE={tasks.mode(s, final=final, initial=initial)}\n"
             f"CHANNEL={'000' if initial else s['final_channel'] if final else s['channel']}\n"
             f"AUTH={'UNSET' if initial else s['final_code'] if final else s['code']}\n")
 
@@ -131,12 +143,21 @@ def crew(s):
 
 
 def route(s):
-    return (f"导航已接入 {s['station_id']}。\n"
+    if s.get('task_schema') != 'linux-nine-v1':
+        return (f"导航已接入 {s['station_id']}。\n"
+                'comms.log 按时间追加；以最后一条 READY 为准，HEARTBEAT 不是频率更新。\n'
+                'CHANNEL 是频率，CODE 是授权码；请同时记下两者。\n')
+    return layout.text(s, (f"任务资料标识：{s['station_id']}。\n"
             'comms.log 按时间追加；以最后一条 READY 为准，HEARTBEAT 不是频率更新。\n'
-            'CHANNEL 是频率，CODE 是授权码；请同时记下两者。\n')
+            'CHANNEL 是频道，CODE 是授权码；请同时记下两者。\n'))
 
 
 def blackbox(s):
+    if s.get('material_version') == 2:
+        label = s['material_entities']['originals']['label']
+        return {'boot.log': f"{s['station_id']} / ORIGINAL / {label}\nDO NOT EDIT\n",
+                '.integrity': s['integrity'] + '\n',
+                'sensors/pressure.csv': 'sample,value\n0,101\n1,99\n2,98\n'}
     return {'boot.log': f"{s['station_id']} / ORIGINAL / BLACKBOX\nDO NOT EDIT\n",
             '.integrity': s['integrity'] + '\n',
             'sensors/pressure.csv': 'minute,kpa\n0,101\n1,99\n2,98\n'}
@@ -151,6 +172,13 @@ python3 "$ORBIT_ENGINE" relay
 
 def receipt(s):
     return f"STATION={s['station_id']}\nRELAY=ONLINE\nRECEIPT={s['receipt']}\n"
+
+
+def manifest(s):
+    if s.get('material_version') == 2:
+        return (f"STATION={s['station_id']}\nSEAL={s['seal']}\n"
+                + s['material_entities']['supplies']['label'] + '：先核对标识，再恢复资料。\n')
+    return f"STATION={s['station_id']}\nSEAL={s['seal']}\n先验证密封，再修复配置。\n"
 
 
 def make_tar(path, files):
@@ -175,57 +203,65 @@ def cleanup_kept(s):
     return {
         'decoy-guide.txt': 'KEEP: signal recognition guide\n',
         'sensor.tmp': 'KEEP: live sensor buffer\n',
-        '.decoy-cache.tmp': 'KEEP: hidden navigation cache\n',
+        '.decoy-cache.tmp': ('KEEP: hidden task cache\n' if s.get('material_version') == 2
+                             else 'KEEP: hidden navigation cache\n'),
     }
 
 
 def generate(root, s):
     root.mkdir()
-    sync_guides(root)
+    sync_guides(root, s)
     for d in ['airlock', 'work', 'blackbox', 'inbox', 'supplies', 'logs']:
-        (root / d).mkdir()
-    (root / 'airlock' / ('.beacon-' + s['beacon'])).mkdir()
-    write(root, 'airlock/WELCOME.txt', explain_options('定位灯藏在点号开头的名字里。可以用 ls -a 查看。', 'ls-a') + '\n')
-    write(root, 'MAP.txt', 'airlock 气闸 / blackbox 原件 / inbox 来件 / supplies 救援舱\nlogs 通信记录 / work 你的工作区。lab 查看任务，lab hint 求助。\n')
+        task_path(root, s, d).mkdir()
+    task_path(root, s, 'airlock/.beacon-' + s['beacon']).mkdir()
+    task_write(root, s, 'airlock/WELCOME.txt', explain_options('定位标记藏在点号开头的名字里。可以用 ls -a 查看。', 'ls-a') + '\n')
+    task_write(root, s, 'MAP.txt', layout.text(s, 'airlock 入口 / blackbox 原件 / inbox 待整理资料 / supplies 待解压资料\nlogs 记录 / work 你的工作区。lab 查看任务，lab hint 求助。\n'))
     for name, text in blackbox(s).items():
-        write(root, 'blackbox/' + name, text)
-    write(root, 'inbox/route.pending', route(s))
+        task_write(root, s, 'blackbox/' + name, text)
+    task_write(root, s, 'inbox/route.pending', route(s))
     for name in cleanup_targets(s):
-        write(root, 'inbox/' + name, 'DECOY - expired\n')
+        task_write(root, s, 'inbox/' + name, 'DECOY - expired\n')
     for name, text in cleanup_kept(s).items():
-        write(root, 'inbox/' + name, text)
-    write(root, 'inbox/crew.csv', crew(s))
-    make_tar(root / 'supplies/rescue.tar.gz', {
-        'manifest.txt': (f"STATION={s['station_id']}\nSEAL={s['seal']}\n先验证密封，再修复配置。\n", 0o644),
+        task_write(root, s, 'inbox/' + name, text)
+    task_write(root, s, 'inbox/crew.csv', crew(s))
+    files = {
+        'manifest.txt': (manifest(s), 0o644),
         'relay.conf': (cfg(s, initial=True), 0o644), 'relay.sh': (RELAY, 0o644),
-    })
+    }
+    make_tar(task_path(root, s, 'supplies/rescue.tar.gz'), {layout.rel(s, name): value for name, value in files.items()})
     lines = ['0000 READY CHANNEL=111 CODE=OLD-DO-NOT-USE']
     lines += [f'{i:04} HEARTBEAT link=searching retry={i % 7}' for i in range(1, 181)]
     lines += ['0181 READY CHANNEL=222 CODE=EXPIRED', '0182 WARN old channel closed',
               f"0183 READY CHANNEL={s['channel']} CODE={s['code']}",
               '0184 HEARTBEAT link=waiting', '0185 HEARTBEAT link=waiting']
-    write(root, 'logs/comms.log', '\n'.join(lines) + '\n')
+    task_write(root, s, 'logs/comms.log', '\n'.join(lines) + '\n')
 
 
 def generate_final(root, s):
-    safe_path(root, 'finale').mkdir(exist_ok=True)
-    make_tar(safe_path(root, 'finale/capsule.tar.gz'), {
+    task_path(root, s, 'finale').mkdir(exist_ok=True)
+    files = {
         'dispatch/relay.conf.draft': (cfg(s), 0o644),
-        'dispatch/discard.tmp': ('This draft must not leave the station.\n', 0o644),
-    })
-    write(root, 'finale/final.log',
+        'dispatch/discard.tmp': ('Exclude this draft from the final delivery.\n' if s.get('material_version') == 2
+                                else 'This draft must not leave the station.\n', 0o644),
+    }
+    make_tar(task_path(root, s, 'finale/capsule.tar.gz'), {layout.rel(s, name): value for name, value in files.items()})
+    task_write(root, s, 'finale/final.log',
           '0001 FINAL CHANNEL=101 AUTH=OLD\n' +
-          ''.join(f'{i:04} WAIT rescue window closed\n' for i in range(2, 70)) +
+          ''.join(f'{i:04} WAIT ' + ('delivery pending\n' if s.get('material_version') == 2
+                                     else 'rescue window closed\n') for i in range(2, 70)) +
           f"0070 FINAL CHANNEL={s['final_channel']} AUTH={s['final_code']}\n0071 WINDOW OPEN\n")
 
 
-def sync_guides(root):
+def sync_guides(root, s=None):
     # Never copy the repository's maintainer instructions into a learner session.
     write(root, 'AGENTS.md', (APP / 'docs/STUDENT-AGENTS.md').read_text(encoding='utf-8'))
     for name in ['STUDENT.md', 'notes.md', 'docs/LOCAL-AI.md']:
         source = APP / name
         if source.is_file():
-            write(root, name, source.read_text(encoding='utf-8'))
+            text = source.read_text(encoding='utf-8')
+            if name == 'STUDENT.md':
+                text = layout.text(s or {}, text)
+            write(root, name, text)
 
 
 def snapshot(session, n):
@@ -251,18 +287,34 @@ def doctor():
     require(Path('/proc/self/stat').exists(), '需要 Linux /proc 文件系统。')
 
 
-def prepare(new=False):
+def prepare(new=False, scene='', interactive=False):
     doctor()
     base = Path(os.environ.get('ORBIT_DATA_DIR', '~/.local/share/orbit-lab')).expanduser().resolve()
     require(not str(base).startswith('/mnt/'), '练习数据请放在 WSL Linux 文件系统中，不能放在 /mnt/，以保证 chmod 语义。')
     base.mkdir(parents=True, exist_ok=True)
     pointer = base / 'current.json'
     if pointer.exists() and not new:
+        require(not scene, '已有学习周目。配套新情景请使用 bash start.sh --new --scene 主题或JSON文件；直接启动会续学。')
         session = Path(read_json(pointer)['session'])
         require(session.parent.resolve() == (base / 'sessions').resolve(), '当前周目索引异常。')
-        load_session(session)
-        sync_guides(session / 'station')
+        s = load_session(session)
+        sync_guides(session / 'station', s)
         return session
+    bundle = scene or 'space'
+    if interactive and not scene:
+        # stdout is reserved for start.sh's session path; the interview stays on stderr.
+        print('先选择你感兴趣的主题，再生成本次学习情景。正在联系本地配置的大模型……', file=sys.stderr, flush=True)
+        question = scene_generator.ask_interest()
+        print(question, file=sys.stderr, flush=True)
+        print('你的主题：', end='', file=sys.stderr, flush=True)
+        theme = sys.stdin.readline().strip()
+        require(bool(theme), '未输入主题，尚未创建学习周目。重新启动后输入主题即可。')
+        print('正在生成故事与任务文件命名……', file=sys.stderr, flush=True)
+        bundle = scene_generator.create(theme)
+        print('已生成：' + bundle['title'] + '。即将开始学习。', file=sys.stderr, flush=True)
+    # Validate before making a new session; a failed generation leaves the old round intact.
+    scene_state = {}
+    scenes.initialize(scene_state, bundle)
     ident = datetime.now().strftime('%Y%m%d-%H%M%S') + '-' + secrets.token_hex(3)
     session = base / 'sessions' / ident
     session.mkdir(parents=True, mode=0o700)
@@ -273,7 +325,13 @@ def prepare(new=False):
          'channel': str(300 + secrets.randbelow(300)), 'code': 'LINK-' + secrets.token_hex(3).upper(),
          'final_channel': str(700 + secrets.randbelow(200)), 'final_code': 'EVAC-' + secrets.token_hex(3).upper(),
          'receipt': secrets.token_hex(8).upper(), 'done': [], 'hints': {}, 'attempts': {},
-         'events': [], 'worker': None, 'cleanup_version': 1}
+         'events': [], 'worker': None, 'cleanup_version': 1, 'task_schema': 'linux-nine-v1'}
+    s.update(scene_state)
+    s.update(course_id=tasks.COURSE_ID, contract_version=tasks.CONTRACT_VERSION,
+             contract_hash=tasks.contract_hash())
+    if scenes.get(s).get('schema_version') == 2:
+        s['material_version'] = 2
+        s['material_entities'] = scenes.get(s)['entities']
     generate(session / 'station', s)
     snapshot(session, 1)
     atomic_json(session / 'state.json', s)
@@ -287,18 +345,31 @@ def load_session(session):
     require(s.get('format') == MARKER, '这不是 ORBIT 的有效存档。')
     require(isinstance(s.get('done'), list) and s['done'] == list(range(1, len(s['done']) + 1))
             and len(s['done']) <= 9, '存档进度异常。')
+    # Legacy rounds have no contract identifiers. When an identifier was
+    # recorded, do not silently resume against a different teaching contract.
+    expected_contract = {'course_id': tasks.COURSE_ID,
+                         'contract_version': tasks.CONTRACT_VERSION,
+                         'contract_hash': tasks.contract_hash()}
+    for name, expected in expected_contract.items():
+        if name in s:
+            require(type(s[name]) is type(expected) and s[name] == expected,
+                    f'本局任务合同与当前程序不兼容（{name}）。'
+                    '请使用创建本局时对应的程序版本，或由维护者迁移存档；当前现场未修改。',
+                    'contract_mismatch')
     safe_path(session, 'station')
+    scenes.get(s)
+    layout.bindings(s)
     return s
 
 
-def equal_file(root, path, expected, message=None, code='file'):
-    require(content(root, path, code) == expected, message or f'{path} 内容与本局原件不符。', code)
+def equal_file(root, path, expected, message=None, code='file', s=None):
+    require(content(root, path, code, s) == expected, message or f'{path} 内容与本局原件不符。', code)
 
 
 def validate_backup(root, s):
     for name, text in blackbox(s).items():
-        equal_file(root, 'blackbox/' + name, text, 'blackbox 原件不完整：' + name, 'original')
-        equal_file(root, 'work/backup/' + name, text, '备份内容不完整：' + name, 'backup')
+        equal_file(root, 'blackbox/' + name, text, 'blackbox 原件不完整：' + name, 'original', s)
+        equal_file(root, 'work/backup/' + name, text, '备份内容不完整：' + name, 'backup', s)
 
 
 def proc_identity(pid):
@@ -345,7 +416,7 @@ def start_worker(session, s):
         return
     token = secrets.token_hex(12)
     root = session / 'station'
-    log = safe_path(root, 'logs/pulse.log')
+    log = task_path(root, s, 'logs/pulse.log')
     with log.open('w', encoding='utf-8') as out:
         p = subprocess.Popen([sys.executable, str(APP / 'orbit.py'), '_worker', str(session), token],
                              stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
@@ -379,10 +450,10 @@ def worker(session, token):
 
 
 def validate_archive(root, s):
-    archive = safe_path(root, 'work/rescue.tar.gz')
+    archive = task_path(root, s, 'work/rescue.tar.gz')
     require(archive.is_file(), '还没有 work/rescue.tar.gz。', 'archive_missing')
     require(archive.stat().st_size < 2_000_000, '归档过大，应仅包含三个交付文件。', 'archive_layout')
-    expected = {'dispatch/relay.conf', 'dispatch/crew.csv', 'dispatch/receipt.txt'}
+    expected = {layout.rel(s, p) for p in ('dispatch/relay.conf', 'dispatch/crew.csv', 'dispatch/receipt.txt')}
     seen = set()
     with tarfile.open(archive, 'r:gz') as tar:
         for index, member in enumerate(tar):
@@ -392,7 +463,7 @@ def validate_archive(root, s):
                     '归档不能包含绝对路径或 ..。', 'archive_layout')
             name = str(PurePosixPath(name))
             if member.isdir():
-                require(name == 'dispatch', '归档中多套了目录：' + name, 'archive_layout')
+                require(name == layout.rel(s, 'dispatch'), '归档中多套了目录：' + name, 'archive_layout')
                 continue
             require(member.isfile() and not member.issparse(), '交付成员必须是普通文件，不能是链接或特殊文件。', 'archive_layout')
             require(name in expected, '归档包含多余文件或路径层级错误：' + name, 'archive_layout')
@@ -401,10 +472,10 @@ def validate_archive(root, s):
             seen.add(name)
             with tar.extractfile(member) as f:
                 text = f.read().decode('utf-8')
-            if name.endswith('relay.conf'):
+            if name == layout.rel(s, 'dispatch/relay.conf'):
                 validate_config(text, s, final=True)
                 require(member.mode & 0o7777 == 0o600, '归档内 relay.conf 权限应为 600；修改后重新打包。', 'archive_permissions')
-            elif name.endswith('crew.csv'):
+            elif name == layout.rel(s, 'dispatch/crew.csv'):
                 require(text == crew(s), '归档中的 crew.csv 与本局名单不符。', 'archive_content')
             else:
                 require(text == receipt(s), '归档中的 receipt.txt 与本局启动回执不符。', 'archive_content')
@@ -414,31 +485,31 @@ def validate_archive(root, s):
 def validate(n, session, s, answer):
     root = session / 'station'
     if n == 1:
-        require(Path.cwd().resolve() == (root / 'airlock').resolve(), '先 cd 到 station/airlock，再在里面提交。', 'location')
-        require(safe_path(root, 'work/evidence').is_dir(), '还没有 work/evidence 目录；请用 mkdir 创建。', 'directory')
+        require(Path.cwd().resolve() == task_path(root, s, 'airlock').resolve(), '先 cd 到 station/airlock，再在里面提交。', 'location')
+        require(task_path(root, s, 'work/evidence').is_dir(), '还没有 work/evidence 目录；请用 mkdir 创建。', 'directory')
         require(answer == s['beacon'], explain_options('信标数字不对；用 ls -a 查看 .beacon- 后面的四位数字。', 'ls-a'), 'beacon')
     elif n == 2:
         validate_backup(root, s)
     elif n == 3:
-        equal_file(root, 'work/evidence/route.txt', route(s), code='move')
+        equal_file(root, 'work/evidence/route.txt', route(s), code='move', s=s)
         for path in ['inbox/route.pending'] + ['inbox/' + name for name in cleanup_targets(s)]:
-            require(not safe_path(root, path).exists(), '这个文件仍在原位置：' + path,
+            require(not task_path(root, s, path).exists(), '这个文件仍在原位置：' + path,
                     'move' if path.endswith('route.pending') else 'cleanup')
-        equal_file(root, 'inbox/crew.csv', crew(s), '名单 crew.csv 丢失或被改动，请保留原件。', 'preserve')
+        equal_file(root, 'inbox/crew.csv', crew(s), '名单 crew.csv 丢失或被改动，请保留原件。', 'preserve', s)
         for name, text in cleanup_kept(s).items():
-            equal_file(root, 'inbox/' + name, text, '需要保留的文件被改动：inbox/' + name, 'preserve')
+            equal_file(root, 'inbox/' + name, text, '需要保留的文件被改动：inbox/' + name, 'preserve', s)
     elif n == 4:
         require(answer == s['seal'], 'SEAL 不匹配，请读取解出的 manifest.txt。', 'seal')
-        equal_file(root, 'work/recovered/manifest.txt', f"STATION={s['station_id']}\nSEAL={s['seal']}\n先验证密封，再修复配置。\n", code='extraction')
-        equal_file(root, 'work/recovered/relay.conf', cfg(s, initial=True), code='extraction')
-        equal_file(root, 'work/recovered/relay.sh', RELAY, code='extraction')
+        equal_file(root, 'work/recovered/manifest.txt', manifest(s), code='extraction', s=s)
+        equal_file(root, 'work/recovered/relay.conf', cfg(s, initial=True), code='extraction', s=s)
+        equal_file(root, 'work/recovered/relay.sh', RELAY, code='extraction', s=s)
     elif n == 5:
         require(answer == s['code'], '不是最新授权码。请读日志最后一条 READY，忽略 HEARTBEAT 和旧 READY。', 'log_record')
     elif n == 6:
-        validate_config(content(root, 'work/recovered/relay.conf', 'config_file'), s)
+        validate_config(content(root, 'work/recovered/relay.conf', 'config_file', s), s)
     elif n == 7:
         validate_relay(root, s)
-        equal_file(root, 'work/recovered/receipt.txt', receipt(s), '尚未得到正确启动回执。请运行 ./relay.sh。', 'receipt')
+        equal_file(root, 'work/recovered/receipt.txt', receipt(s), '尚未得到正确启动回执。请运行 ./relay.sh。', 'receipt', s)
     elif n == 8:
         require(worker_alive(s.get('worker')), '本局探针尚未运行或已超时。请先 lab load，再观察 top。', 'process_absent')
         require(answer == str(s['worker']['pid']), 'PID 不匹配，请定位 COMMAND 为 station-pulse 的那一行。', 'process_identity')
@@ -448,21 +519,22 @@ def validate(n, session, s, answer):
 
 
 def validate_relay(root, s):
-    validate_config(content(root, 'work/recovered/relay.conf', 'config_file'), s)
-    equal_file(root, 'work/recovered/relay.sh', RELAY, '启动脚本内容被修改，请使用原脚本。', 'script')
+    validate_config(content(root, 'work/recovered/relay.conf', 'config_file', s), s)
+    equal_file(root, 'work/recovered/relay.sh', RELAY, '启动脚本内容被修改，请使用原脚本。', 'script', s)
     for name, mode in [('relay.conf', 0o600), ('relay.sh', 0o700)]:
-        p = safe_path(root, 'work/recovered/' + name)
+        p = task_path(root, s, 'work/recovered/' + name)
         require(stat.S_IMODE(p.stat().st_mode) == mode,
                 f'{name} 权限应为 {mode:o}，当前是 {stat.S_IMODE(p.stat().st_mode):o}。', 'permissions')
 
 
 def show_status(s):
-    print(scenes.render(f"\n  ORBIT / 失联空间站    {s['station_id']}    {len(s['done'])}/9", s))
+    scene = scenes.get(s)
+    print(f"\n  ORBIT / {scene['title']}    {s['station_id']}    {len(s['done'])}/9")
     print('  ' + LAB_SCOPE)
     print('  ' + '━' * 46)
-    for i, (title, reward) in enumerate(zip(TITLES, REWARDS), 1):
+    for i, (title, reward) in enumerate(zip(scene['titles'], scene['rewards']), 1):
         label = '●' if i in s['done'] else '▶' if i == len(s['done']) + 1 else '○'
-        print(scenes.render(f'  {label} {i:02}  {title}' + (f'  / {reward}' if i in s['done'] else ''), s))
+        print(f'  {label} {i:02}  {title}' + (f'  / {reward}' if i in s['done'] else ''))
     print()
 
 
@@ -475,6 +547,9 @@ def report(session, s):
            'archive_sha256': s.get('archive_sha256'),
            'learning': s.get('learning', {}),
            'scene': s.get('scene', 'space'),
+           'scene_title': scenes.get(s)['title'], 'task_schema': 'linux-nine-v1',
+           'course_id': s.get('course_id', 'linux-foundations'),
+           'contract_version': s.get('contract_version'), 'contract_hash': s.get('contract_hash'),
            'shell_observations': s.get('shell_observations', []),
            'validation_scope': '文件结果与当前进程验证；不证明命令使用过程或独立学习成效。'}
     p = safe_path(session, 'report.json')
@@ -495,11 +570,11 @@ def save_notebook(session, s):
 
 
 def ending(session, s):
-    print('\n  ✦  RESCUE COMPLETE  ✦\n')
-    print(scenes.render('地面站：“交付包已验证。三名船员已接入返航轨道。”', s))
-    print(scenes.render('你从一个隐藏目录出发，保住黑匣子，恢复中继，送出了最后一份救援包。', s))
-    print('\n救援凭证：' + s['flag'])
-    print('交付物：' + str(session / 'station/work/rescue.tar.gz'))
+    scene = scenes.get(s)
+    print('\n  ✦  ' + ('RESCUE COMPLETE' if scene['id'] == 'space' else 'TASK COMPLETE') + '  ✦\n')
+    print(scene['ending'])
+    print('\n完成凭证：' + s['flag'])
+    print('交付物：' + str(task_path(session / 'station', s, 'work/rescue.tar.gz')))
     print('通关报告：' + str(report(session, s)))
     print('个人学习手册：lab notebook；知识点复习：lab review。')
     print(explain_options('输入 exit 退出。想换一组线索重玩：bash start.sh --new。', 'lab-new') + '\n')
@@ -522,17 +597,17 @@ def check(session, s, answer):
         s['done'].append(n)
         s['events'].append({'at': now(), 'phase': n, 'result': 'passed'})
         learning.record_check(s, n, True)
-        print(scenes.render(f'\n[通过 {n:02}/09] {REWARDS[n-1]}', s))
+        print(f'\n[通过 {n:02}/09] ' + scenes.get(s)['rewards'][n-1])
         print('本关知识：' + REFLECTIONS[n-1])
         if n == 9:
             s['completed_at'] = now()
-            archive = session / 'station/work/rescue.tar.gz'
+            archive = task_path(session / 'station', s, 'work/rescue.tar.gz')
             digest = hashlib.sha256(archive.read_bytes()).hexdigest()
             s['flag'] = 'ORBIT{' + s['station_id'] + '-' + digest[:16].upper() + '}'
             s['archive_sha256'] = digest
             ending(session, s)
         else:
-            print(scenes.render(f'\n下一关 {n+1:02} / {TITLES[n]}\n' + brief(n+1, s), s))
+            print(f'\n下一关 {n+1:02} / ' + scenes.get(s)['titles'][n] + '\n' + brief(n+1, s))
         return 0
     except (LabError, OSError, UnicodeError, tarfile.TarError, EOFError) as e:
         s['events'].append({'at': now(), 'phase': n, 'result': 'retry', 'reason': str(e)})
@@ -548,7 +623,7 @@ def check(session, s, answer):
         elif isinstance(e, FileNotFoundError):
             code = 'file'
         item = learning.record_check(s, n, False, code, facts=getattr(e, 'facts', []))
-        print('\n[尚未通过] ' + runtime_error(e))
+        print('\n[尚未通过] ' + layout.text(s, runtime_error(e)))
         print(feedback(item))
         print('也可查原生帮助：' + native_help(CONCEPTS[item['concepts'][0]]['note']))
         print('进度未回退。lab hint 获取提示；lab learn 查命令；误操作可 lab repair。')
@@ -571,7 +646,7 @@ def repair(session, s):
     if root.exists():
         root.rename(target)
     shutil.copytree(checkpoint, root)
-    sync_guides(root)
+    sync_guides(root, s)
     s['events'].append({'at': now(), 'phase': n, 'result': 'repair',
                          'operation_cursor': s.get('shell_sequence', 0)})
     if 'learning' in s:
@@ -612,7 +687,7 @@ def run_command(args, session, s):
         show_status(s)
         if cmd == 'mission':
             if n <= 9:
-                print('本关工具：' + SKILLS[n-1] + '\n\n' + scenes.render(brief(n, s), s))
+                print('本关工具：' + SKILLS[n-1] + '\n\n' + brief(n, s))
                 print('\n提示：lab hint 逐级求助；lab tutor 针对问题讲解；lab notebook 查看学习手册。')
             else:
                 ending(session, s)
@@ -692,7 +767,7 @@ def run_command(args, session, s):
         print(learning.review(s, args.topic, args.answer))
     elif cmd == 'learn':
         require(n <= 9, '已经通关，可用 lab notes 查命令笔记，或阅读 STUDENT.md。')
-        print(CARDS[n-1])
+        print(layout.text(s, CARDS[n-1]))
         print('\n也鼓励查阅原生帮助：' + native_help(CONCEPTS[PHASE_CONCEPTS[n][0]]['note']))
         print('\n更多常用参数及命令名含义：lab notes（例如 lab notes ls），也可阅读 notes.md。')
     elif cmd == 'load':
@@ -705,8 +780,8 @@ def run_command(args, session, s):
     elif cmd == 'relay':
         require(n == 7, '请在第七关执行中继启动任务。')
         validate_relay(session / 'station', s)
-        write(session / 'station', 'work/recovered/receipt.txt', receipt(s), 0o600)
-        print('RELAY ONLINE：启动成功，receipt.txt 已写入。现在 lab check。')
+        task_write(session / 'station', s, 'work/recovered/receipt.txt', receipt(s), 0o600)
+        print(layout.text(s, 'RELAY ONLINE：启动成功，receipt.txt 已写入。现在 lab check。'))
     elif cmd == 'repair':
         repair(session, s)
     elif cmd == 'report':
@@ -755,6 +830,7 @@ def main():
     parser.command_name = argv[0] if argv else ''
     sub = parser.add_subparsers(dest='command')
     p = sub.add_parser('prepare'); p.add_argument('--new', action='store_true')
+    p.add_argument('--scene', default=''); p.add_argument('--interactive', action='store_true')
     sub.add_parser('doctor')
     for name in ['mission', 'status', 'help', 'root', 'learn', 'load', 'relay', 'repair', 'report', 'concepts', 'notebook', 'activity']:
         sub.add_parser(name)
@@ -764,6 +840,7 @@ def main():
     p = sub.add_parser('ai'); p.add_argument('action', nargs='?', choices=['init', 'status'], default='status')
     p = sub.add_parser('tracking'); p.add_argument('mode', nargs='?', choices=['on', 'off', 'status'], default='status')
     p = sub.add_parser('scene'); p.add_argument('name', nargs='?', default='')
+    p.add_argument('--generate', metavar='主题'); p.add_argument('--output', metavar='JSON文件')
     p = sub.add_parser('tutor')
     p.add_argument('question', nargs='?', default='')
     p.add_argument('--level', type=int, choices=[1, 2, 3])
@@ -777,7 +854,10 @@ def main():
     if args.command == 'ai':
         print(ai_tutor.init_config() if args.action == 'init' else ai_tutor.status()); return 0
     if args.command == 'prepare':
-        print(prepare(args.new)); return 0
+        print(prepare(args.new, args.scene, args.interactive)); return 0
+    if args.command == 'scene' and (args.generate is not None or args.output is not None):
+        require(args.generate is not None and not args.name, '生成情景请用 lab scene --generate "主题" [--output 文件.json]。')
+        print(scene_generator.generate(args.generate, args.output)); return 0
     if args.command == 'doctor':
         doctor(); print('环境检查通过：Linux、Python 3.9+、Bash、Vim、top、GNU 基础命令就绪。'); return 0
     require(bool(os.environ.get('ORBIT_HOME')), '请先运行 bash start.sh 进入实验终端。')
@@ -790,6 +870,9 @@ def main():
         s = load_session(session)
         try:
             return run_command(args, session, s)
+        except (LabError, OSError, ValueError, tarfile.TarError) as e:
+            print('[ORBIT] ' + layout.text(s, runtime_error(e)), file=sys.stderr)
+            return 1
         finally:
             atomic_json(session / 'state.json', s)
             if 'learning' in s:
