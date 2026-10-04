@@ -31,7 +31,7 @@ import tasks
 import error_patterns
 
 APP = Path(__file__).resolve().parent
-VERSION = '1.1.0-dev'
+VERSION = '2.0.0'
 MARKER = 'orbit-linux-lab-v1'
 
 

@@ -9,9 +9,9 @@
 | Python | Linux 中的 Python 3.9+；不使用 Windows 中安装的 Python |
 | 终端工具 | Bash、GNU coreutils、tar、gzip、Vim、procps（提供 top） |
 | 权限 | 首次安装 WSL 可能需要 Windows 管理员授权；安装 Linux 软件可能需要 sudo |
-| 网络 | 首次下载 WSL/Ubuntu 或安装缺失软件需要联网；依赖齐备后实验离线运行 |
+| 网络 | 安装依赖、默认新周目的兴趣问询/情境生成和 AI 求助需要联网；本地主题、已有周目、Linux 操作与判题可离线运行 |
 
-不需要 VS Code、Docker、Node.js、pip 包、OpenAI API Key 或 Codex。AI 助教是可选的学习方式。Git Bash、PowerShell 和 CMD 本身不能替代实验需要的 Linux 环境。
+不需要 VS Code、Docker、Node.js、pip 包或 Codex。默认新周目需要在 `ai.local.json` 配置可用模型服务；服务不限于 OpenAI。若要完全离线开始，按下文指定本地主题。Git Bash、PowerShell 和 CMD 本身不能替代实验需要的 Linux 环境。
 
 ## Windows 用户：双击入口
 
@@ -19,7 +19,14 @@
 
 1. 第一次使用，双击 **安装环境.cmd**。
 2. 按屏幕提示完成环境准备。依赖已经齐全时会直接检查通过，不重复安装。
-3. 显示“准备完成”后，双击 **启动实验.cmd**。
+3. 在解压后的 `orbit-lab` 目录复制 `ai.example.json`，将副本命名为 `ai.local.json`；打开副本，填写 `base_url`、`api_key`、`model`，并设置 `enabled: true`。这个方式不需要 Windows 安装 Python，注意不要保存成 `.json.txt`。详见[本地 AI 配置](LOCAL-AI.md)。
+4. 保存配置后，双击 **启动实验.cmd**，回答兴趣问题并生成本局情境。学生包不附带维护者的密钥。
+
+离线开始时，在解压后的 `orbit-lab` 目录打开 PowerShell，运行以下命令；把 `Ubuntu` 换成你实际安装的发行版名称：
+
+```powershell
+wsl -d Ubuntu --cd "$PWD" -- bash ./start.sh --new --scene space
+```
 
 只想检查而不安装，双击 **检查环境.cmd**。
 
@@ -57,8 +64,12 @@ wsl --install -d Ubuntu
 
 ```bash
 bash setup.sh --install
+python3 orbit.py ai init
+# 编辑 ai.local.json，填写模型服务配置并设 enabled 为 true。
 bash start.sh
 ```
+
+无需联网生成主题时，安装依赖后改用 `bash start.sh --new --scene space`。已有周目直接用 `bash start.sh` 续学。
 
 只检查：
 

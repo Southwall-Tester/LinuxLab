@@ -1,17 +1,21 @@
 # ORBIT Linux Lab · 情境式实践
 
+当前正式版本：**2.0.0**。学生包下载见 [GitHub Releases](https://github.com/Southwall-Tester/LinuxLab/releases/latest)。
+
 一个在 **WSL / Linux 真实终端**中进行情境式实践的中文 Linux 入门 Lab。首次进入时，大模型先问你喜欢什么主题，再为固定的学习任务创作故事与对象名称；本地程序根据任务合同生成文件、组合题面，完成校验与语义复核后进入 Bash。题材可以自由描述，Linux 知识点和检查要求保持一致。
 
 核心命令：`cd mkdir ls cp mv rm tar cat tail vim top`，另设完整的 `chmod` 权限关。预计 60～90 分钟，实际时长取决于终端基础；没有经过课堂计时或教学效果验证。
 
 ## 环境准备与启动
 
-**Windows 新用户：**完整解压学生 ZIP 包，先双击 **安装环境.cmd**，准备完成后双击 **启动实验.cmd**。只检查、不安装可双击 **检查环境.cmd**。安装向导自动检查 WSL 发行版并补齐缺失软件；首次安装 WSL 可能需要管理员授权、重启和创建 Ubuntu 用户，按提示完成后再次运行即可。详见[安装说明](docs/SETUP.md)。
+**Windows 新用户：**完整解压学生 ZIP 包，先双击 **安装环境.cmd**。环境准备完成后，按下文配置本地 API，再双击 **启动实验.cmd**；离线开始请使用下文指定主题的启动命令。只检查、不安装可双击 **检查环境.cmd**。安装向导自动检查 WSL 发行版并补齐缺失软件；首次安装 WSL 可能需要管理员授权、重启和创建 Ubuntu 用户，按提示完成后再次运行即可。详见[安装说明](docs/SETUP.md)。
 
 **已有 WSL/Linux：**进入自己的项目目录运行：
 
 ```bash
 bash setup.sh --install
+python3 orbit.py ai init
+# 编辑生成的 ai.local.json，填写服务地址、密钥、模型并启用后再启动。
 bash start.sh
 ```
 
@@ -19,7 +23,7 @@ bash start.sh
 
 **首次或新周目：先问兴趣，再生成情境。** 默认 `bash start.sh` 在没有旧周目时调用本地配置的模型，显示一个兴趣问题；你回答主题后，模型为九项任务生成动机、进展与主题对象名称。本地程序编译实际文件名并检查结构，再通过独立请求复核语义；合格后冻结本局实例，建立文件并进入真实 Bash。失败时最多带诊断重新生成一次，仍不合格则中止，保留旧周目。已有周目直接续学，不重新提问，也不因启动续学发送模型请求。`bash start.sh --new` 会重新询问主题，旧周目保留。
 
-先在程序目录创建本地 API 文件：WSL/Linux 用 `python3 orbit.py ai init`，Windows PowerShell 用 `python orbit.py ai init`（需要该环境已有 Python）。打开生成的 `ai.local.json`，填写 `base_url`、`api_key`、`model` 并设置 `enabled: true`，再启动实验。密钥留在本地文件，不填到命令行。未配置或模型请求失败时会说明原因，不把默认主题冒充为生成结果。详见[配置说明](docs/LOCAL-AI.md)。
+先在程序目录创建本地 API 文件：WSL/Linux 用 `python3 orbit.py ai init`；Windows 可直接复制 `ai.example.json` 为 `ai.local.json`，不需要另装 Windows Python。打开该文件，填写 `base_url`、`api_key`、`model` 并设置 `enabled: true`，再启动实验。密钥留在本地文件，不填到命令行。未配置或模型请求失败时会说明原因，不把默认主题冒充为生成结果。详见[配置说明](docs/LOCAL-AI.md)。
 
 需要离线开始时，显式指定本地主题：
 
