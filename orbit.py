@@ -28,6 +28,7 @@ import scenes
 import layout
 import scene_generator
 import tasks
+import error_patterns
 
 APP = Path(__file__).resolve().parent
 VERSION = '1.1.0-dev'
@@ -298,6 +299,13 @@ def prepare(new=False, scene='', interactive=False):
         session = Path(read_json(pointer)['session'])
         require(session.parent.resolve() == (base / 'sessions').resolve(), '当前周目索引异常。')
         s = load_session(session)
+        # Preserve an explicit off choice; old rounds without a choice adopt the
+        # new local teaching default when the learner next starts this round.
+        if 'tracking_enabled' not in s:
+            s['tracking_enabled'] = True
+            atomic_json(session / 'state.json', s)
+        if s['tracking_enabled']:
+            write(session, 'tracking.enabled', 'enabled\n', 0o600)
         sync_guides(session / 'station', s)
         return session
     bundle = scene or 'space'
@@ -325,7 +333,8 @@ def prepare(new=False, scene='', interactive=False):
          'channel': str(300 + secrets.randbelow(300)), 'code': 'LINK-' + secrets.token_hex(3).upper(),
          'final_channel': str(700 + secrets.randbelow(200)), 'final_code': 'EVAC-' + secrets.token_hex(3).upper(),
          'receipt': secrets.token_hex(8).upper(), 'done': [], 'hints': {}, 'attempts': {},
-         'events': [], 'worker': None, 'cleanup_version': 1, 'task_schema': 'linux-nine-v1'}
+         'events': [], 'worker': None, 'cleanup_version': 1, 'task_schema': 'linux-nine-v1',
+         'tracking_enabled': True}
     s.update(scene_state)
     s.update(course_id=tasks.COURSE_ID, contract_version=tasks.CONTRACT_VERSION,
              contract_hash=tasks.contract_hash())
@@ -333,6 +342,7 @@ def prepare(new=False, scene='', interactive=False):
         s['material_version'] = 2
         s['material_entities'] = scenes.get(s)['entities']
     generate(session / 'station', s)
+    write(session, 'tracking.enabled', 'enabled\n', 0o600)
     snapshot(session, 1)
     atomic_json(session / 'state.json', s)
     atomic_json(pointer, {'session': str(session)})
@@ -553,7 +563,7 @@ def report(session, s):
            'shell_observations': s.get('shell_observations', []),
            'validation_scope': '文件结果与当前进程验证；不证明命令使用过程或独立学习成效。'}
     p = safe_path(session, 'report.json')
-    atomic_json(p, out)
+    atomic_json(p, error_patterns.report_copy(out))
     return p
 
 
@@ -578,6 +588,103 @@ def ending(session, s):
     print('通关报告：' + str(report(session, s)))
     print('个人学习手册：lab notebook；知识点复习：lab review。')
     print(explain_options('输入 exit 退出。想换一组线索重玩：bash start.sh --new。', 'lab-new') + '\n')
+
+
+def check_observation_key(root, s, phase, answer):
+    """Hash only files/properties observed by this phase; never follow links."""
+    backup = [(base + '/' + name, 'content')
+              for name in blackbox(s) for base in ('blackbox', 'work/backup')]
+    # content() uses this existence fact to distinguish a nested-copy error.
+    backup.append(('work/backup/blackbox/boot.log', 'file'))
+    cleanup = [('inbox/' + name, 'exists')
+               for name in ['route.pending'] + cleanup_targets(s)]
+    preserved = [('inbox/' + name, 'content')
+                 for name in ['crew.csv'] + list(cleanup_kept(s))]
+    relevant = {
+        1: [('airlock', 'directory'), ('work/evidence', 'directory')],
+        2: backup,
+        3: [('work/evidence/route.txt', 'content')] + cleanup + preserved,
+        4: [('work/recovered/' + name, 'content')
+            for name in ('manifest.txt', 'relay.conf', 'relay.sh')],
+        5: [],
+        6: [('work/recovered/relay.conf', 'content')],
+        7: [('work/recovered/relay.conf', 'content_mode'),
+            ('work/recovered/relay.sh', 'content_mode'),
+            ('work/recovered/receipt.txt', 'content')],
+        8: [],
+        9: backup + [('work/rescue.tar.gz', 'archive')],
+    }
+    digest = hashlib.sha256()
+
+    def add(value):
+        digest.update(json.dumps(value, ensure_ascii=False).encode() + b'\n')
+
+    add([s['id'], phase, answer if phase in (1, 4, 5, 8) else '',
+         str(Path.cwd()) if phase == 1 else '',
+         [worker_alive(s.get('worker')), (s.get('worker') or {}).get('pid')]
+         if phase == 8 else None])
+    root_fd = None
+
+    def observe(logical, kind):
+        parts = Path(layout.rel(s, logical)).parts
+        if not parts or any(part in ('', '.', '..') for part in parts) or Path(parts[0]).is_absolute():
+            raise OSError('Invalid task path')
+        current_fd = os.dup(root_fd)
+        try:
+            for index, part in enumerate(parts):
+                try:
+                    info = os.stat(part, dir_fd=current_fd, follow_symlinks=False)
+                except FileNotFoundError:
+                    return ['missing', index]
+                if stat.S_ISLNK(info.st_mode):
+                    return ['link', index]
+                if index < len(parts) - 1:
+                    if not stat.S_ISDIR(info.st_mode):
+                        return ['parent_not_directory', index]
+                    next_fd = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW,
+                                      dir_fd=current_fd)
+                    os.close(current_fd)
+                    current_fd = next_fd
+                    continue
+                if kind == 'exists':
+                    return ['exists']
+                if kind == 'directory':
+                    return ['directory', stat.S_ISDIR(info.st_mode)]
+                if kind == 'file':
+                    return ['file', stat.S_ISREG(info.st_mode)]
+                if not stat.S_ISREG(info.st_mode):
+                    return ['not_regular']
+                # Match content() and validate_archive() limits. No directory
+                # metadata, unrelated file contents or unrelated modes count.
+                limit = 1_999_999 if kind == 'archive' else 65536
+                mode = stat.S_IMODE(info.st_mode) if kind == 'content_mode' else None
+                if info.st_size > limit:
+                    return ['oversize', info.st_size, mode]
+                fd = os.open(part, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             dir_fd=current_fd)
+                with os.fdopen(fd, 'rb') as stream:
+                    before = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(before.st_mode):
+                        raise OSError('Task file changed during observation')
+                    data = stream.read(limit + 1)
+                    after = os.fstat(stream.fileno())
+                signature = lambda st: (st.st_ino, st.st_mode, st.st_size, st.st_mtime_ns)
+                if signature(info) != signature(before) or signature(before) != signature(after):
+                    raise OSError('Task file changed during observation')
+                return ['content', hashlib.sha256(data).hexdigest(), mode]
+        finally:
+            os.close(current_fd)
+
+    try:
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        for logical, kind in relevant[phase]:
+            add([logical, kind, observe(logical, kind)])
+    except OSError:
+        return None
+    finally:
+        if root_fd is not None:
+            os.close(root_fd)
+    return digest.hexdigest()
 
 
 def check(session, s, answer):
@@ -622,9 +729,12 @@ def check(session, s, answer):
             code = 'path_type'
         elif isinstance(e, FileNotFoundError):
             code = 'file'
-        item = learning.record_check(s, n, False, code, facts=getattr(e, 'facts', []))
+        item = learning.record_check(s, n, False, code, facts=getattr(e, 'facts', []),
+                                     observation_key=check_observation_key(session / 'station', s, n, answer))
         print('\n[尚未通过] ' + layout.text(s, runtime_error(e)))
         print(feedback(item))
+        if item.get('repeat_checks'):
+            print(f'相同现场的重复检查：追加 {item["repeat_checks"]} 次，仍归入同一问题。')
         print('也可查原生帮助：' + native_help(CONCEPTS[item['concepts'][0]]['note']))
         print('进度未回退。lab hint 获取提示；lab learn 查命令；误操作可 lab repair。')
         print('针对这次问题：lab tutor；复习记录：lab notebook。')
@@ -651,6 +761,9 @@ def repair(session, s):
                          'operation_cursor': s.get('shell_sequence', 0)})
     if 'learning' in s:
         s['learning']['active_issue'] = None
+        for pattern in s['learning'].get('input_errors', {}).get('patterns', {}).values():
+            if pattern['phase'] == n:
+                pattern['active'] = False  # Repair ends an episode, not evidence of learning.
     print('已保存原现场：' + str(target))
     print('已恢复到本关开始时。请立即输入 cd "$(lab root)" 回到新现场，然后 lab。')
 
@@ -721,14 +834,27 @@ def run_command(args, session, s):
             learning.touch_topic(s, key, now())
         print('本平台助教功能（不是 Linux 通用命令）')
         print(f'助教提示 {level}/3 · {topic["title"]}')
+        if item.get('input_error'):
+            print('本地观察：' + item['observation'])
+            print('依据：' + '；'.join(item['evidence']))
         explanation, source = topic['explanation'], 'local'
+        hypotheses = []
         if not args.offline:
             try:
-                explanation = ai_tutor.explain(s, item, level, args.question)
+                context = error_patterns.context(s, n)
+                if context['evidence']:
+                    result = ai_tutor.diagnose(s, item, level, args.question, context)
+                    explanation, hypotheses = result['explanation'], result['hypotheses']
+                else:
+                    explanation = ai_tutor.explain(s, item, level, args.question)
                 source = 'ai'
             except ai_tutor.AIError as e:
                 print(str(e))
         print(('AI 概念解释：' if source == 'ai' else '本地概念解释：') + explanation)
+        for hypothesis in hypotheses:
+            print('AI 待验证解释：' + hypothesis['reason'])
+            print('引用记录：' + '、'.join(hypothesis['evidence_ids']))
+            print('验证目标：' + hypothesis['verify'])
         print('下一步：' + topic['hints'][level-1])
         print('预期观察：用现场结果确认原因；操作与提交由你完成。')
         print('原生帮助：' + native_help(topic['note']))
@@ -752,8 +878,8 @@ def run_command(args, session, s):
                 marker.unlink()
             s['tracking_enabled'] = enabled
         print('本平台操作记录：' + ('已开启' if s.get('tracking_enabled') else '已关闭'))
-        print('记录实验目录内的命令类别、白名单选项、对象角色、有限文件状态和退出码。')
-        print('不保存原始命令、具体路径或值，不记录输出、按键或停顿；可用 lab tracking off 关闭。')
+        print('新周目默认开启；仅记录本实验内的有限操作特征及经过筛选的错误命令词、选项和路径片段。')
+        print('不保存完整命令、原生输出、按键或停顿；本地记录不会逐条自动上传。lab tracking off 可关闭。')
     elif cmd == 'activity':
         print(activity.display(s))
     elif cmd == 'scene':
@@ -805,7 +931,8 @@ def main():
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 s = load_session(session)
                 cwd = Path(os.environ.get('ORBIT_OBSERVED_CWD', str(Path.cwd())))
-                activity.record(s, session, line, int(argv[1]), cwd, argv[2] == '1')
+                activity.record(s, session, line, int(argv[1]), cwd, argv[2] == '1',
+                                os.environ.get('ORBIT_OBSERVED_COMMAND_KIND'))
                 atomic_json(session / 'state.json', s)
         except (LabError, OSError, ValueError, KeyError):
             pass

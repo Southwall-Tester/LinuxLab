@@ -168,7 +168,7 @@ lab tutor ["问题"]  针对最近失败逐级求助；--offline 离线；--topi
 lab notebook        查看按本局经历整理的学习手册
 lab review          查看复习清单；lab review 知识点 看题，再加 A/B/C 作答
 lab ai init         创建本地 API 配置；lab ai status 只检查格式，不发送请求
-lab tracking on/off  开关本地操作记录（默认关闭，记录命令语义、有限状态与退出码）
+lab tracking on/off  开关本地操作记录（新周目默认开启，可查看具体输入问题）
 lab activity         查看最近操作记录；不记录参数、输出或按键
 lab scene            查看可选情境和当前选择
 lab scene 名称/本地JSON文件  切换完整叙事；现有周目的文件名保持，避免移动学生文件

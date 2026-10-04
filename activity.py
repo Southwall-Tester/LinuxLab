@@ -1,4 +1,4 @@
-"""Opt-in semantic Bash observations; no raw command strings or private values."""
+"""Bounded local Bash observations, including safe error fragments."""
 import hashlib
 import re
 import shlex
@@ -6,6 +6,8 @@ from pathlib import Path
 
 from learning import stamp
 import layout
+import error_patterns
+import input_diagnostics
 
 COMMANDS = {'ls', 'pwd', 'cd', 'mkdir', 'cp', 'mv', 'rm', 'tar', 'cat', 'tail',
             'head', 'vim', 'chmod', 'top', 'grep', 'find'}
@@ -17,6 +19,12 @@ ROLES = {'blackbox': 'original', 'work/backup': 'backup',
          'work/rescue.tar.gz': 'archive', 'work/evidence': 'evidence',
          'inbox': 'inbox', 'airlock': 'entry', 'logs': 'logs',
          'supplies': 'supplies', 'finale': 'finale'}
+
+
+def _command_semantics_available(kind):
+    # None keeps the older direct-call interface used by local fixtures. The
+    # live prompt hook supplies a kind; unrecognized metadata is never trusted.
+    return kind is None or kind in ('file', 'builtin', 'missing')
 
 
 def role(path, cwd, root, s=None):
@@ -58,7 +66,7 @@ def config_fingerprint(root, s=None):
     return None
 
 
-def record(s, session, line, exit_code, cwd, dotglob=False):
+def record(s, session, line, exit_code, cwd, dotglob=False, command_kind=None):
     if not s.get('tracking_enabled') or not Path(cwd).resolve().is_relative_to((session / 'station').resolve()):
         return
     # history 1 prefixes an index; only tokenize, never execute or retain this text.
@@ -67,16 +75,20 @@ def record(s, session, line, exit_code, cwd, dotglob=False):
         words = shlex.split(line, comments=True)
     except ValueError:
         words = []
-    if not words or words[0] in ('lab', 'exit'):
+    if not words or words[0] == 'exit' or (words[0] == 'lab' and exit_code == 0):
         return
     complex_line = any(c in line for c in (';', '|', '&', '\n', '$', '`', '(', ')', '<', '>'))
+    semantic_input = (_command_semantics_available(command_kind)
+                      and not any(word in ('--help', '--version') for word in words[1:]))
     if complex_line:
         command = '组合命令'
+    elif not semantic_input:
+        command = '未解释的命令'
     else:
         command = words[0] if words[0] in COMMANDS else '其他命令'
     root = session / 'station'
     flags, operands, raw_operands = [], [], []
-    known_options = True
+    known_options = semantic_input
     if command in COMMANDS:
         after_separator = False
         for word in words[1:]:
@@ -93,6 +105,9 @@ def record(s, session, line, exit_code, cwd, dotglob=False):
     event = {'at': stamp(), 'phase': min(len(s['done']) + 1, 9),
              'command': command, 'exit_code': exit_code, 'flags': flags,
              'operand_roles': operands, 'known_options': known_options, 'facts': scene_facts(root, s)}
+    if command_kind is not None:
+        event['command_kind'] = (command_kind if command_kind in
+                                ('alias', 'function', 'keyword', 'file', 'builtin', 'missing') else 'unknown')
     # Conservative: quoted/mixed syntax remains unknown, as do complex commands.
     event['plain_star_excludes_hidden'] = (command == 'cp' and not dotglob
         and '*' in line and not any(c in line for c in ('"', "'", '{', '}', '?', '[', ']'))
@@ -108,6 +123,13 @@ def record(s, session, line, exit_code, cwd, dotglob=False):
     events = s.setdefault('shell_observations', [])
     events.append(event)
     del events[:-2000]
+    # Actual submitted simple inputs only. Never re-execute commands, and never
+    # turn an unparsed compound line or a nonzero status alone into a diagnosis.
+    if (not complex_line and semantic_input
+            and not any(c in line for c in ('*', '?', '[', ']', '{', '}', '~'))):
+        items = input_diagnostics.detect(s, root, Path(cwd), words, exit_code)
+        location = Path(cwd).resolve().relative_to(root.resolve()).as_posix()
+        error_patterns.record(s, items, words, exit_code, location, event['phase'], event['at'])
 
 
 def display(s):
@@ -118,7 +140,8 @@ def display(s):
             lines.append('  选项：' + ', '.join(item.get('flags', [])) + '；对象角色：' + ', '.join(item.get('operand_roles', [])))
     if not s.get('shell_observations'):
         lines.append('暂无记录。lab tracking on 可开启，lab tracking off 可关闭。')
-    lines.append('只保留白名单选项、对象角色与有限文件状态，不保存原始命令、具体路径或值。')
+    lines.extend(['', *error_patterns.lines(s)])
+    lines.append('保留有限操作特征，以及筛选后的错误命令词、选项或实验内路径片段；不保存完整命令。')
     lines.append('不记录输出、按键、删除或停顿；退出码不是知识掌握结论。')
     return '\n'.join(lines)
 
@@ -132,6 +155,8 @@ def evidence_for(s, phase, item, facts):
     recent = [e for e in observations[-20:] if e['phase'] == phase and e.get('sequence', 0) > boundary]
     evidence = []
     for event in reversed(recent):
+        if not _command_semantics_available(event.get('command_kind')):
+            continue
         if item['code'] == 'backup' and event['command'] == 'cp':
             roles = event.get('operand_roles', [])
             if 'original' in roles and 'backup' in roles:

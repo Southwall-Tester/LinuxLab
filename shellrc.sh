@@ -9,23 +9,37 @@ command_not_found_handle() {
   fi
   return 127
 }
-HISTFILE="$ORBIT_HOME/history"
+# Keep arrow-key history in this shell only. Old history files are left intact.
+HISTFILE=/dev/null
 HISTSIZE=2000
 HISTFILESIZE=2000
+HISTCONTROL=
+HISTIGNORE=
+history -c
 shopt -s histappend checkwinsize
 _orbit_previous_pwd=$PWD
-# Opt-in observation of completed commands, not an editor/keystroke logger.
+# Bounded observation of completed commands; lab tracking off disables it.
 # Preserve the command's status for the user's next `$?` expression.
 _orbit_observe_prompt() {
   local orbit_status=$?
   local orbit_line
   local orbit_dotglob=0
+  local orbit_kind=unknown
+  if [[ "${_orbit_prompt_ready:-0}" != 1 ]]; then
+    _orbit_prompt_ready=1
+    _orbit_previous_pwd=$PWD
+    return "$orbit_status"
+  fi
   if [[ -f "$ORBIT_HOME/tracking.enabled" ]]; then
     orbit_line="$(HISTTIMEFORMAT= builtin history 1)"
     if [[ -n "$orbit_line" && "$orbit_line" != "${_orbit_last_observed_line:-}" ]]; then
       _orbit_last_observed_line="$orbit_line"
       shopt -q dotglob && orbit_dotglob=1
-      printf '%s' "$orbit_line" | ORBIT_OBSERVED_CWD="$_orbit_previous_pwd" python3 "$ORBIT_ENGINE" --observe-shell "$orbit_status" "$orbit_dotglob" >/dev/null 2>&1
+      if [[ "$orbit_line" =~ ^[[:space:]]*[0-9]+[[:space:]]+([a-zA-Z0-9_.-]+) ]]; then
+        orbit_kind="$(builtin type -t -- "${BASH_REMATCH[1]}" 2>/dev/null)"
+        orbit_kind="${orbit_kind:-missing}"
+      fi
+      printf '%s' "$orbit_line" | ORBIT_OBSERVED_CWD="$_orbit_previous_pwd" ORBIT_OBSERVED_COMMAND_KIND="$orbit_kind" python3 "$ORBIT_ENGINE" --observe-shell "$orbit_status" "$orbit_dotglob" >/dev/null 2>&1
     fi
   fi
   _orbit_previous_pwd=$PWD
@@ -37,5 +51,6 @@ trap 'python3 "$ORBIT_ENGINE" stop --quiet' EXIT
 printf '\n真实 Bash 已就绪。输入 lab 查看任务，lab help 查看帮助，exit 存档退出。\n'
 printf 'lab 及子命令只由本平台实验终端提供，不是 Linux 通用命令。\n'
 printf '也鼓励查原生帮助：ls --help、man ls；Bash 用 help cd；Vim 内用 :help。\n'
+lab tracking status
 printf '练习文件位于 %s/station；这是普通 Shell，命令也能访问其他目录。\n' "$ORBIT_HOME"
 lab

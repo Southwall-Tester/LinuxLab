@@ -93,6 +93,12 @@ def main():
         onboarding_names = ['test_real_launcher_interviews_generates_then_resumes_without_api',
                             'test_failed_new_generation_preserves_existing_round_and_pointer']
         suite.addTests(test_scene_onboarding.SceneOnboardingTest(name) for name in onboarding_names)
+        import test_error_tracking
+        test_error_tracking.APP = app
+        tracking_names = ['test_new_round_enables_tracking_with_marker',
+                          'test_pty_repeated_typo_resolution_and_recurrence',
+                          'test_repeated_identical_checks_preserve_attempts_but_count_one_problem']
+        suite.addTests(test_error_tracking.ErrorTrackingIntegration(name) for name in tracking_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
@@ -100,6 +106,7 @@ def main():
               'packaged_integration_tests': names, 'passed': True,
               'packaged_teaching_tests': teaching_names,
               'packaged_scene_tests': scene_names, 'packaged_onboarding_tests': onboarding_names,
+              'packaged_tracking_tests': tracking_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

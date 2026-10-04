@@ -1,5 +1,6 @@
 """Local learning evidence and interval review; never a mastery score."""
 from datetime import datetime, timedelta, timezone
+import copy
 
 from knowledge import CONCEPTS, PHASE_CONCEPTS, diagnosis
 from cli_messages import native_help
@@ -21,7 +22,7 @@ def touch_topic(s, key, at):
     })
 
 
-def record_check(s, phase, passed, code='unknown', at=None, facts=None):
+def record_check(s, phase, passed, code='unknown', at=None, facts=None, observation_key=None):
     at = at or stamp()
     state = learning_state(s)
     s['events'][-1]['operation_cursor'] = s.get('shell_sequence', 0)
@@ -33,6 +34,18 @@ def record_check(s, phase, passed, code='unknown', at=None, facts=None):
     if item:
         from activity import evidence_for
         item['evidence'] = evidence_for(s, phase, item, facts or [])
+        if (observation_key is not None and previous_issue
+                and previous_issue.get('phase') == phase and previous_issue.get('code') == code
+                and previous_issue.get('observation_key') == observation_key):
+            # Rechecking unchanged evidence is the same problem, not another
+            # independent failure. Keep the original diagnostic evidence.
+            item = copy.deepcopy(previous_issue)
+            item.update(at=at, repeat_checks=item.get('repeat_checks', 0) + 1)
+            state['active_issue'] = item
+            s['events'][-1]['diagnosis'] = copy.deepcopy(item)
+            return item
+        item.update(observation_key=observation_key, repeat_checks=0,
+                    problem_id=len(s['events']))
     keys = PHASE_CONCEPTS[phase] if passed else item['concepts']
     for key in keys:
         entry = touch_topic(s, key, at)
@@ -52,6 +65,10 @@ def record_check(s, phase, passed, code='unknown', at=None, facts=None):
 
 
 def active_issue(s, phase):
+    from error_patterns import current_issue
+    observed_input = current_issue(s, phase)
+    if observed_input:
+        return observed_input
     item = s.get('learning', {}).get('active_issue')
     if item and item.get('phase') == phase:
         return item
@@ -104,6 +121,9 @@ def notebook(s, at=None):
         for event in resolved:
             lines.append(f'- 第 {event["phase"]} 关在 {event["at"]} 通过检查；此前观察：{event["resolved_observation"]}。')
         lines.append('这说明后续结果满足检查条件，不证明之前推测的原因或具体修正过程。')
+    from error_patterns import lines as input_error_lines
+    lines += ['', '## 具体输入与重复问题', '', *input_error_lines(s), '',
+              '相同作业现场和相同提交的连续检查保留次数，但合并为同一诊断问题；不重复增加知识点关联失败。']
     lines += ['', '复习间隔采用 1、7、30 天的可解释规则，不是经验证的个人遗忘曲线；不自动跳过关卡。', '']
     return '\n'.join(lines)
 
@@ -112,11 +132,17 @@ def review(s, topic='', answer='', at=None):
     at = at or stamp()
     entries = s.get('learning', {}).get('concepts', {})
     if not topic:
+        episodes = {}
+        for pattern in s.get('learning', {}).get('input_errors', {}).get('patterns', {}).values():
+            concept = pattern['concept']
+            episodes[concept] = episodes.get(concept, 0) + pattern['episodes']
         lines = ['已遇到知识点的复习清单（不推进关卡）：']
         for key, entry in sorted(entries.items(), key=lambda row:
-                                 (row[1]['next_review'] > at, -row[1]['failures'], row[1]['next_review'])):
+                                 (row[1]['next_review'] > at,
+                                  -(row[1]['failures'] + episodes.get(row[0], 0)), row[1]['next_review'])):
             status = '现在可复习' if entry['next_review'] <= at else '建议 ' + entry['next_review']
-            lines.append(f'  {key} · {CONCEPTS[key]["title"]} · {status}')
+            lines.append(f'  {key} · {CONCEPTS[key]["title"]} · {status}' +
+                         f' · 关联检查问题 {entry["failures"]} 次，输入尝试段 {episodes.get(key, 0)} 段')
         if not entries:
             lines.append('暂无记录。先完成当前任务的观察与练习。')
         lines.append('用法：lab review 知识点；看题后用 lab review 知识点 A/B/C 作答。')
