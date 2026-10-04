@@ -31,7 +31,7 @@ import tasks
 import error_patterns
 
 APP = Path(__file__).resolve().parent
-VERSION = '2.0.1'
+VERSION = '2.0.0'
 PRODUCT_NAME = 'LinuxLab'
 # Storage identifiers and ORBIT_* variables remain compatible with old rounds.
 MARKER = 'orbit-linux-lab-v1'
