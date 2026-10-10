@@ -22,6 +22,7 @@ from cli_messages import (InputError, LabParser, USAGE, unknown_lab_command,
                           unknown_topic, shell_lookup_error, runtime_error, LAB_SCOPE, native_help)
 from knowledge import CONCEPTS, PHASE_CONCEPTS, feedback
 import learning
+import pliac_bridge
 import ai_tutor
 import activity
 import scenes
@@ -301,6 +302,7 @@ def prepare(new=False, scene='', interactive=False):
         session = Path(read_json(pointer)['session'])
         require(session.parent.resolve() == (base / 'sessions').resolve(), '当前周目索引异常。')
         s = load_session(session)
+        pliac_bridge.attach(s)
         # Preserve an explicit off choice; old rounds without a choice adopt the
         # new local teaching default when the learner next starts this round.
         if 'tracking_enabled' not in s:
@@ -309,6 +311,8 @@ def prepare(new=False, scene='', interactive=False):
         if s['tracking_enabled']:
             write(session, 'tracking.enabled', 'enabled\n', 0o600)
         sync_guides(session / 'station', s)
+        atomic_json(session / 'state.json', s)
+        pliac_bridge.publish_safely(s)
         return session
     bundle = scene or 'space'
     if interactive and not scene:
@@ -340,6 +344,7 @@ def prepare(new=False, scene='', interactive=False):
     s.update(scene_state)
     s.update(course_id=tasks.COURSE_ID, contract_version=tasks.CONTRACT_VERSION,
              contract_hash=tasks.contract_hash())
+    pliac_bridge.attach(s)
     if scenes.get(s).get('schema_version') == 2:
         s['material_version'] = 2
         s['material_entities'] = scenes.get(s)['entities']
@@ -348,6 +353,7 @@ def prepare(new=False, scene='', interactive=False):
     snapshot(session, 1)
     atomic_json(session / 'state.json', s)
     atomic_json(pointer, {'session': str(session)})
+    pliac_bridge.publish_safely(s)
     return session
 
 
@@ -936,6 +942,7 @@ def main():
                 activity.record(s, session, line, int(argv[1]), cwd, argv[2] == '1',
                                 os.environ.get('ORBIT_OBSERVED_COMMAND_KIND'))
                 atomic_json(session / 'state.json', s)
+                pliac_bridge.publish_safely(s)
         except (LabError, OSError, ValueError, KeyError):
             pass
         return 0
@@ -1004,6 +1011,7 @@ def main():
             return 1
         finally:
             atomic_json(session / 'state.json', s)
+            pliac_bridge.publish_safely(s)
             if 'learning' in s:
                 try:
                     save_notebook(session, s)
