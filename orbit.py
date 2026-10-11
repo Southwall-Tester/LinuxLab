@@ -24,6 +24,7 @@ from knowledge import CONCEPTS, PHASE_CONCEPTS, feedback
 import learning
 import pliac_bridge
 import ai_tutor
+import reference_usage
 import activity
 import scenes
 import layout
@@ -814,8 +815,10 @@ def run_command(args, session, s):
                 ending(session, s)
     elif cmd == 'help':
         print(HELP)
+        reference_usage.record(s, 'lab_help')
     elif cmd == 'notes':
         show_notes(args.topic)
+        reference_usage.record(s, 'notes', '' if args.topic in ('', 'all', 'sources') else args.topic)
     elif cmd == 'root':
         print(session / 'station')
     elif cmd == 'check':
@@ -955,8 +958,10 @@ def main():
         worker(Path(argv[1]), argv[2])
         return 0
     if argv in (['-h'], ['--help']):
-        print(HELP)
-        return 0
+        if not os.environ.get('ORBIT_HOME'):
+            print(HELP)
+            return 0
+        argv = ['help']
     if argv and argv[0] not in USAGE and not argv[0].startswith('-'):
         raise InputError(unknown_lab_command(argv[0], argv[1:]))
     if len(argv) == 2 and argv[0] in USAGE and argv[1] in ('-h', '--help'):

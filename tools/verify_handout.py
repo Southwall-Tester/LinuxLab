@@ -99,6 +99,8 @@ def main():
                           'test_pty_repeated_typo_resolution_and_recurrence',
                           'test_repeated_identical_checks_preserve_attempts_but_count_one_problem']
         suite.addTests(test_error_tracking.ErrorTrackingIntegration(name) for name in tracking_names)
+        import test_reference_usage
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_reference_usage.ReferenceUsageTests))
         import test_branding
         test_branding.APP = app
         branding_names = ['test_new_entry_resumes_legacy_round_and_preserves_error_handling',

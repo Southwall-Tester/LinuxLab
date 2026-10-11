@@ -8,6 +8,7 @@ from learning import stamp
 import layout
 import error_patterns
 import input_diagnostics
+import reference_usage
 
 COMMANDS = {'ls', 'pwd', 'cd', 'mkdir', 'cp', 'mv', 'rm', 'tar', 'cat', 'tail',
             'head', 'vim', 'chmod', 'top', 'grep', 'find'}
@@ -78,6 +79,7 @@ def record(s, session, line, exit_code, cwd, dotglob=False, command_kind=None):
     if not words or words[0] == 'exit' or (words[0] == 'lab' and exit_code == 0):
         return
     complex_line = any(c in line for c in (';', '|', '&', '\n', '$', '`', '(', ')', '<', '>'))
+    reference_usage.observe_shell(s, words, exit_code, command_kind, complex_line)
     semantic_input = (_command_semantics_available(command_kind)
                       and not any(word in ('--help', '--version') for word in words[1:]))
     if complex_line:
@@ -141,6 +143,13 @@ def display(s):
     if not s.get('shell_observations'):
         lines.append('暂无记录。lab tracking on 可开启，lab tracking off 可关闭。')
     lines.extend(['', *error_patterns.lines(s)])
+    if s.get('reference_lookups'):
+        sources = {'notes': '课程笔记', 'lab_help': '平台帮助', 'command_help': '命令帮助',
+                   'man': 'man 手册', 'shell_help': 'Bash 帮助'}
+        lines.append('\n资料查阅（最近 10 条；查阅不直接证明不理解）：')
+        for item in s['reference_lookups'][-10:]:
+            lines.append(f"第 {item['phase']} 关 · {sources[item['source']]} · {item['topic'] or '通用说明/目录/全文'}"
+                         f" · 操作序号 {item['operation_cursor']} 之后" + (' · 通关后阅读' if item['after_completion'] else ''))
     lines.append('保留有限操作特征，以及筛选后的错误命令词、选项或实验内路径片段；不保存完整命令。')
     lines.append('不记录输出、按键、删除或停顿；退出码不是知识掌握结论。')
     return '\n'.join(lines)

@@ -279,7 +279,11 @@ class LabTest(unittest.TestCase):
         self.assertNotIn('| ---', rendered)
         self.assertNotIn('## tail', self.cli('notes', 'tail'))
         self.cli('notes', '../state.json', ok=False)
-        self.assertEqual(self.state(), before)
+        after = self.state()
+        self.assertEqual(after.pop('reference_total'), 7)
+        lookups = after.pop('reference_lookups')
+        self.assertEqual([r['topic'] for r in lookups], ['', 'ls', 'cd', 'pwd', 'glob', '', 'tail'])
+        self.assertEqual(after, before)
 
     def test_lab_input_errors_are_friendly_and_preserve_session(self):
         before = self.state()
