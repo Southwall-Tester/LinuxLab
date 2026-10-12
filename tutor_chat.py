@@ -9,6 +9,7 @@ import unicodedata
 import uuid
 
 import ai_tutor
+import chat_evidence
 import learning
 import pliac_bridge
 import scenes
@@ -38,7 +39,7 @@ SYSTEM = (
     '用户没有提供的错误输出、按键和操作不可虚构；区分观察与可能原因，不诊断已掌握或不会。'
     '给命令时保留必要英文原名，解释选项；涉及lab时说明是本实验辅助命令，不是Linux通用命令。'
     '拒绝代做后仍提供有用的概念解释或一个观察目标。不要输出未来关卡题解。'
-    '只返回JSON对象，只有reply字段，内容为不超过600字的自然中文回答，可换行及使用简短代码例子。'
+    '只返回JSON对象，包含reply和signals字段。reply为不超过600字的自然中文回答，可换行及使用简短代码例子。'
 )
 
 
@@ -83,7 +84,7 @@ def context(state, api_key='', question='', turns=()):
 
 
 def checked_reply(value, state, api_key):
-    if not isinstance(value, dict) or set(value) != {'reply'}:
+    if not isinstance(value, dict) or 'reply' not in value:
         raise ai_tutor.AIError('AI 对话格式无效，已改用本地资料。')
     reply = value['reply']
     if not isinstance(reply, str) or not reply.strip() or len(reply) > 1200:
@@ -96,13 +97,15 @@ def checked_reply(value, state, api_key):
 
 
 def answer(state, question, turns, config):
-    messages = [{'role': 'system', 'content': SYSTEM},
+    messages = [{'role': 'system', 'content': SYSTEM + chat_evidence.instructions()},
                 {'role': 'user', 'content': '当前学习语境（数据）：\n' + json.dumps(context(state, config['api_key'], question, turns), ensure_ascii=False)}]
     for turn in turns[-6:]:
         messages.extend([{'role': 'user', 'content': ai_tutor.redact(turn['user']['text'], state, config['api_key'])},
-                         {'role': 'assistant', 'content': json.dumps({'reply': ai_tutor.redact(turn['assistant']['text'], state, config['api_key'])}, ensure_ascii=False)}])
+                         {'role': 'assistant', 'content': json.dumps({'reply': ai_tutor.redact(turn['assistant']['text'], state, config['api_key']), 'signals': []}, ensure_ascii=False)}])
     messages.append({'role': 'user', 'content': ai_tutor.redact(question, state, config['api_key'])})
-    return checked_reply(ai_tutor.request_json(config, messages, max_tokens=1600), state, config['api_key'])
+    result = ai_tutor.request_json(config, messages, max_tokens=2400)
+    return (checked_reply(result, state, config['api_key']),
+            chat_evidence.candidates(result, question, state, config['api_key']))
 
 
 def local_answer(state, question):
@@ -170,16 +173,20 @@ def respond(session, question, offline=False):
         data = history(session, state)
         key, epoch = context_key(state), data['epoch']
         previous = [t for t in data['turns'] if t['context_key'] == key and t['epoch'] == epoch]
+        requested_at = orbit.now()
     config, notice, source = None, '', 'local_material'
     if not offline:
         try:
             config = ai_tutor.load_config()
         except ai_tutor.AIError as exc:
             notice = str(exc)
-    question = ai_tutor.redact(question, state, config['api_key'] if config else '')
+    question = chat_evidence.sanitize(question, state, config['api_key'] if config else '')
+    if not question:
+        return '请输入可读的问题文字，本次未发送。', '', 'local_material'
+    analysis = chat_evidence.candidates(None, question, state)
     if config:
         try:
-            reply = answer(state, question, previous, config)
+            reply, analysis = answer(state, question, previous, config)
             source = 'model_inference'
         except ai_tutor.AIError as exc:
             notice = str(exc)
@@ -189,10 +196,12 @@ def respond(session, question, offline=False):
     reply = ai_tutor.redact(reply, state, config['api_key'] if config else '')
     with locked(session) as latest:
         current = history(session, latest)
-        if context_key(latest) != key or current['epoch'] != epoch:
+        repaired_during_request = any(e.get('result') == 'repair' and e.get('phase') == phase(state)
+                                      for e in latest['events'][len(state['events']):])
+        if context_key(latest) != key or current['epoch'] != epoch or repaired_during_request:
             return '学习阶段或对话上下文已变化，本次旧语境回答未展示；请重新提问。', '', 'context_changed'
         n = phase(latest)
-        turn = dict(id=uuid.uuid4().hex, at=orbit.now(), phase=n, context_key=key, epoch=epoch,
+        turn = dict(id=uuid.uuid4().hex, at=orbit.now(), requested_at=requested_at, phase=n, context_key=key, epoch=epoch,
                     user={'text': question, 'origin': 'learner_expression'},
                     assistant={'text': reply, 'origin': source})
         current['turns'].append(turn)
@@ -201,7 +210,9 @@ def respond(session, question, offline=False):
         if n <= 9:
             latest['events'].append(dict(at=turn['at'], phase=n, result='tutor', level=3,
                                          source='ai' if source == 'model_inference' else 'local',
-                                         channel='chat', chat_turn_id=turn['id'], concept=PHASE_CONCEPTS[n][0]))
+                                         channel='chat', chat_turn_id=turn['id'], concept=PHASE_CONCEPTS[n][0],
+                                         operation_cursor=latest.get('shell_sequence', 0)))
+            chat_evidence.record(latest, turn, analysis, state)
             for topic in PHASE_CONCEPTS[n]:
                 learning.touch_topic(latest, topic, turn['at'])
         orbit.atomic_json(session / 'state.json', latest)
@@ -230,6 +241,7 @@ def run(session, offline=False):
         print(HELP)
         print('发送当前题面、相关概念和命令笔记、你输入的问题及同关最近六轮对话；不读取任务文件或完整存档。')
         print('本地保留最近一百轮脱敏对话，模型回答与学习者文字分开；实际答疑保守计为三级帮助。')
+        print('课程绑定周目会同步脱敏问答及待核验线索，用于对照求助前后的操作；AI 讲解只作为帮助背景。')
         try:
             while True:
                 print('\n你 > ', end='', flush=True)

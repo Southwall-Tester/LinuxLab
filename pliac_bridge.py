@@ -13,6 +13,7 @@ import sys
 import tempfile
 
 import tasks
+import chat_evidence
 from knowledge import ISSUES, CONCEPTS
 
 SCHEMA = 1
@@ -65,8 +66,8 @@ def snapshot(state):
     if not context:
         return None
     events, levels = [], {}
-    # Whitelist export: never forward answers, state, raw commands, paths, AI
-    # explanations, diagnosis hypotheses, codes, credentials or free text.
+    # Operational evidence remains whitelisted. Explicit dialogue travels in
+    # separate fields with speaker provenance and unverified candidate labels.
     for cursor, event in enumerate(state['events'], 1):
         phase, kind = event.get('phase'), event.get('result')
         if type(phase) is not int or not 1 <= phase <= 9:
@@ -104,7 +105,8 @@ def snapshot(state):
                 tracking_enabled=bool(state.get('tracking_enabled')),
                 operation_total=state.get('shell_sequence', 0),
                 phases_passed=len(state['done']), completed=len(state['done']) == 9,
-                validation_scope='文件结果与当前进程检查；不证明独立完成或概念掌握。')
+                validation_scope='文件结果与当前进程检查；不证明独立完成或概念掌握。',
+                **chat_evidence.export(state))
 
 
 def publish(state):

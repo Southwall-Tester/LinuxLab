@@ -113,6 +113,8 @@ def main():
                       'test_offline_never_calls_provider_and_does_not_execute_input',
                       'test_real_bash_returns_after_exit_interrupt_and_eof']
         suite.addTests(test_chat.ChatIntegration(name) for name in chat_names)
+        import test_chat_evidence
+        suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_chat_evidence.ChatEvidenceTests))
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),

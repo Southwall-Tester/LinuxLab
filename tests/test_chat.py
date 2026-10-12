@@ -111,8 +111,11 @@ class ChatIntegration(unittest.TestCase):
         report = pliac_bridge.snapshot(after)
         self.assertEqual(report['events'][-1]['kind'], 'tutor')
         self.assertEqual(report['events'][-1]['prompt_level'], 3)
-        self.assertNotIn('这一关和 cat', json.dumps(report, ensure_ascii=False))
-        self.assertNotIn('tar 负责', json.dumps(report, ensure_ascii=False))
+        self.assertIn('这一关和 cat', report['dialogue_evidence'][0]['learner']['text'])
+        self.assertIn('tar 负责', report['dialogue_evidence'][0]['assistant']['text'])
+        self.assertNotIn('这一关和 cat', json.dumps(report['events'], ensure_ascii=False))
+        self.assertEqual(report['dialogue_analysis'][0]['status'], 'unverified')
+        self.assertEqual(report['dialogue_total'], 4)
 
     def test_offline_never_calls_provider_and_does_not_execute_input(self):
         marker = Path(self.temp.name) / 'must-not-exist'
