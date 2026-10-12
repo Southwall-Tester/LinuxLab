@@ -7,6 +7,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FILES = ['README.md', 'STUDENT.md', 'notes.md', 'AGENTS.md', 'VALIDATION.md',
+         'tutor_chat.py',
          'start.sh', 'shellrc.sh', 'setup.sh', 'windows.ps1', 'linuxlab.py', 'orbit.py', 'lessons.py', 'terminal_notes.py', 'cli_messages.py',
          'knowledge.py', 'learning.py', 'pliac_bridge.py', 'reference_usage.py', 'ai_tutor.py', 'activity.py', 'error_patterns.py', 'input_diagnostics.py', 'scenes.py', 'layout.py', 'tasks.py', 'scene_generator.py', 'scene_blueprint.py', 'ai.example.json',
          'scenes/space.json', 'scenes/ocean.json', 'scenes/museum.json', 'scenes/anime.json',

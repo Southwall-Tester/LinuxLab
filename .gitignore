@@ -25,5 +25,7 @@ history
 ai.local.json
 ai.local.*.json
 learning-notebook.md
+tutor-chat.json
+tutor-chat.lock
 tracking.enabled
 scenes/generated-*.json

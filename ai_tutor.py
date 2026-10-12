@@ -79,7 +79,7 @@ def status():
         lines.append('AI 已启用且配置格式有效（未发送请求，未验证服务连通性）。')
     except AIError as e:
         lines.append(str(e))
-    lines.append('新周目兴趣问询、情景生成及 lab tutor 使用此配置；显式 --scene 可离线开始，lab tutor --offline 使用本地提示。密钥不会显示或写入报告。')
+    lines.append('新周目兴趣问询、情景生成、lab tutor 和 lab chat 使用此配置；显式 --scene 可离线开始，lab tutor --offline / lab chat --offline 使用本地资料。密钥不会显示或写入报告。')
     return '\n'.join(lines)
 
 

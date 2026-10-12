@@ -810,7 +810,7 @@ def run_command(args, session, s):
         if cmd == 'mission':
             if n <= 9:
                 print('本关工具：' + SKILLS[n-1] + '\n\n' + brief(n, s))
-                print('\n提示：lab hint 逐级求助；lab tutor 针对问题讲解；lab notebook 查看学习手册。')
+                print('\n提示：lab hint 逐级求助；lab tutor 针对问题讲解；lab chat 连续答疑；lab notebook 查看学习手册。')
             else:
                 ending(session, s)
     elif cmd == 'help':
@@ -979,6 +979,7 @@ def main():
     p = sub.add_parser('hint'); p.add_argument('level', nargs='?', type=int, choices=[1, 2, 3])
     p = sub.add_parser('notes'); p.add_argument('topic', nargs='?', default='')
     p = sub.add_parser('ai'); p.add_argument('action', nargs='?', choices=['init', 'status'], default='status')
+    p = sub.add_parser('chat'); p.add_argument('--offline', action='store_true')
     p = sub.add_parser('tracking'); p.add_argument('mode', nargs='?', choices=['on', 'off', 'status'], default='status')
     p = sub.add_parser('scene'); p.add_argument('name', nargs='?', default='')
     p.add_argument('--generate', metavar='主题'); p.add_argument('--output', metavar='JSON文件')
@@ -1004,6 +1005,9 @@ def main():
     require(bool(os.environ.get('ORBIT_HOME')), '请先运行 bash start.sh 进入实验终端。')
     session = Path(os.environ['ORBIT_HOME'])
     require(session.is_absolute(), '周目路径必须为绝对路径。')
+    if args.command == 'chat':
+        import tutor_chat
+        return tutor_chat.run(session, args.offline)
     # Serialize checks, hints, repair and worker lifecycle across terminals.
     import fcntl
     with safe_path(session, 'state.lock').open('a') as lock:

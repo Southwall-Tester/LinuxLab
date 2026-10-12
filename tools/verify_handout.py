@@ -56,6 +56,7 @@ def main():
         # Run selected integration scenarios against the extracted executable code.
         sys.path.insert(0, str(app))
         __import__('orbit')
+        __import__('tutor_chat')
         spec = importlib.util.spec_from_file_location('handout_tests', ROOT / 'tests/test_lab.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -106,6 +107,12 @@ def main():
         branding_names = ['test_new_entry_resumes_legacy_round_and_preserves_error_handling',
                           'test_existing_completion_credential_is_preserved_in_renamed_report']
         suite.addTests(test_branding.BrandingTest(name) for name in branding_names)
+        import test_chat
+        test_chat.APP = app
+        chat_names = ['test_multiturn_http_resume_clear_and_evidence_boundaries',
+                      'test_offline_never_calls_provider_and_does_not_execute_input',
+                      'test_real_bash_returns_after_exit_interrupt_and_eof']
+        suite.addTests(test_chat.ChatIntegration(name) for name in chat_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
@@ -115,6 +122,7 @@ def main():
               'packaged_scene_tests': scene_names, 'packaged_onboarding_tests': onboarding_names,
               'packaged_tracking_tests': tracking_names,
               'packaged_branding_tests': branding_names,
+              'packaged_chat_tests': chat_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

@@ -40,6 +40,7 @@ USAGE = {
     'review': 'lab review [知识点] [A|B|C]（查看复习清单、题目或提交本题答案）',
     'tutor': 'lab tutor ["你的问题"] [--level 1|2|3] [--topic 知识点] [--offline]（针对当前关求助）',
     'ai': 'lab ai init（创建本地 API 配置），或 lab ai status（只检查配置格式）',
+    'chat': 'lab chat（连续 AI 答疑，/exit 返回 Bash）；lab chat --offline 使用本地资料',
     'tracking': 'lab tracking [on|off|status]（开启、关闭或查看本地操作记录状态）',
     'activity': 'lab activity（查看最近的本地操作记录）',
     'scene': 'lab scene [主题名或JSON文件]；lab scene --generate "兴趣主题" [--output 文件.json]；配套文件命名的新周目用 bash start.sh --new --scene 主题或JSON文件',

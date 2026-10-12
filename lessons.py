@@ -165,6 +165,7 @@ lab repair          备份整个现场，并恢复到当前关开始时的文件
 lab report          查看/导出本局报告
 lab concepts        查看本关知识点及其标识
 lab tutor ["问题"]  针对最近失败逐级求助；--offline 离线；--topic 指定本关知识点
+lab chat            连续 AI 答疑，直接输入问题与追问；/exit 或 Ctrl+C 返回 Bash
 lab notebook        查看按本局经历整理的学习手册
 lab review          查看复习清单；lab review 知识点 看题，再加 A/B/C 作答
 lab ai init         创建本地 API 配置；lab ai status 只检查格式，不发送请求
@@ -182,5 +183,5 @@ exit                保存退出；再次 bash start.sh 自动续玩
 每关完成后自动保存检查点。hint 不扣分，失败不回档；没有倒计时和爆炸惩罚。
 记录检查、提示、复习与时间；不截取终端输出。Bash 历史仅存在本局目录。
 lab 是本实验的辅助命令；ls、cp、vim 等保持原生 Linux 行为。
-新周目的主题生成、lab scene --generate 和启用 API 的 lab tutor 会使用本地 API 配置联网；不上传存档或终端历史。
+新周目的主题生成、lab scene --generate 和启用 API 的 lab tutor / lab chat 会使用本地 API 配置联网；不上传完整存档或终端历史。
 真实 Shell 不是隔离容器，请在练习目录内操作。'''
