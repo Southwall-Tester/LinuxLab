@@ -1,6 +1,6 @@
 # LinuxLab · 情境式实践
 
-当前版本：**2.1.0**，包含自适应学习画像、独立短测与连续 AI 答疑。直接下载 [GitHub Release 学生包](https://github.com/Southwall-Tester/LinuxLab/releases/tag/v2.1.0) 即可使用。
+当前版本：**0.3.0**，包含自适应学习画像、独立短测与连续 AI 答疑。直接下载 [GitHub Release 学生包](https://github.com/Southwall-Tester/LinuxLab/releases/tag/v0.3.0) 即可使用。
 
 一个在 **WSL / Linux 真实终端**中进行情境式实践的中文 Linux 入门 Lab。首次进入时，大模型先问你喜欢什么主题，再为固定的学习任务创作故事与对象名称；本地程序根据任务合同生成文件、组合题面，完成校验与语义复核后进入 Bash。题材可以自由描述，Linux 知识点和检查要求保持一致。
 
