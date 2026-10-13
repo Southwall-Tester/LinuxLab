@@ -34,7 +34,7 @@ import error_patterns
 import assessment
 
 APP = Path(__file__).resolve().parent
-VERSION = '2.0.0'
+VERSION = '2.1.0'
 PRODUCT_NAME = 'LinuxLab'
 # Storage identifiers and ORBIT_* variables remain compatible with old rounds.
 MARKER = 'orbit-linux-lab-v1'
