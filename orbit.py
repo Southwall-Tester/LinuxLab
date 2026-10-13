@@ -818,6 +818,7 @@ def run_command(args, session, s):
     if cmd == 'profile':
         require(not args.metrics or not args.topic, '整体预测指标请用 lab profile --metrics，不附知识点。')
         print(assessment.metrics_view(session, s, args.json) if args.metrics else
+              assessment.calibration_view(session, s, args.topic, args.json) if args.calibration else
               assessment.profile_view(session, s, args.topic, args.json))
         return 0
     if cmd == 'next':
@@ -1048,7 +1049,9 @@ def main():
     p.add_argument('topic', nargs='?', default=''); p.add_argument('answer', nargs='?', default='')
     p = sub.add_parser('profile')
     p.add_argument('topic', nargs='?', default=''); p.add_argument('--json', action='store_true')
-    p.add_argument('--metrics', action='store_true')
+    profile_mode = p.add_mutually_exclusive_group()
+    profile_mode.add_argument('--metrics', action='store_true')
+    profile_mode.add_argument('--calibration', action='store_true')
     p = sub.add_parser('next'); p.add_argument('topic', nargs='?', default='')
     p = sub.add_parser('assess'); p.add_argument('action', nargs='?', default='')
     p.add_argument('answer', nargs='*')

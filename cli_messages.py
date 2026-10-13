@@ -38,7 +38,7 @@ USAGE = {
     'concepts': 'lab concepts（查看本关知识点）',
     'notebook': 'lab notebook（查看个人学习手册）',
     'review': 'lab review [知识点] [A|B|C]（查看复习清单、题目或提交本题答案）',
-    'profile': 'lab profile [知识点] [--json]；lab profile --metrics [--json]（画像与预测质量）',
+    'profile': 'lab profile [知识点] [--json]；lab profile --metrics；lab profile --calibration [知识点] [--json]',
     'next': 'lab next [知识点]（自动安排个性化学习、达标短测或复习）',
     'assess': 'lab assess [知识点]；lab assess show|hint|abandon；lab assess submit [答案]',
     'tutor': 'lab tutor ["你的问题"] [--level 1|2|3] [--topic 知识点] [--offline]（针对当前关求助）',

@@ -34,7 +34,7 @@ def main():
             'ai.local', 'learning-notebook', 'learner-profile', 'assessment-work/'))
             for name in z.namelist())
         assert all('linuxlab/' + name in z.namelist() for name in (
-            'mastery.py', 'assessment_tasks.py', 'assessment.py', 'docs/MASTERY.md'))
+            'mastery.py', 'calibration.py', 'assessment_tasks.py', 'assessment.py', 'docs/MASTERY.md'))
         example = json.loads(z.read('linuxlab/ai.example.json'))
         assert example['enabled'] is False and example['api_key'] == ''
     start = time.monotonic()
@@ -62,6 +62,7 @@ def main():
         __import__('orbit')
         __import__('tutor_chat')
         __import__('mastery')
+        __import__('calibration')
         __import__('assessment_tasks')
         __import__('assessment')
         spec = importlib.util.spec_from_file_location('handout_tests', ROOT / 'tests/test_lab.py')
@@ -129,6 +130,9 @@ def main():
                             'test_active_chat_uses_short_task_without_story_evidence',
                             'test_profile_symlink_and_attempt_symlink_rejected',
                             'test_prediction_metrics_preserve_prior_predictions',
+                            'test_calibration_status_is_automatic_and_cold_start_is_read_only',
+                            'test_prediction_is_durable_before_grading_and_reused_after_crash',
+                            'test_real_submission_activates_calibration_and_new_round_keeps_it',
                             'test_real_terminal_short_assessment']
         suite.addTests(test_assessment.AssessmentIntegration(name) for name in assessment_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)

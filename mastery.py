@@ -1,7 +1,8 @@
 """Versioned, replayable Bayesian teaching decisions for the local learner.
 
 The persisted events are observations; this module derives a separate policy
-decision. Parameters are engineering defaults, not measured model accuracy.
+decision. Engineering defaults can be replaced by locally validated, versioned
+parameters; they do not constitute measured population-level model accuracy.
 No filesystem, learner-answer access, network or third-party packages are used.
 """
 from copy import deepcopy
@@ -80,15 +81,7 @@ def _test_parameters(item, parameters):
     return slip, guess
 
 
-def _profile(profile):
-    if not isinstance(profile, dict):
-        raise ValueError('profile must be an object')
-    if (type(profile.get('schema_version')) is not int
-            or profile['schema_version'] != 1
-            or profile.get('policy_version') != POLICY_VERSION
-            or profile.get('parameter_version') != PARAMETER_VERSION):
-        raise ValueError('unsupported learner profile or policy version')
-    parameters = profile.get('parameters')
+def _checked_parameters(parameters):
     if not isinstance(parameters, dict) or set(parameters) != set(DEFAULT_PARAMETERS):
         raise ValueError('profile must contain the complete versioned parameters')
     for name in ('q0', 'learning_rate', 'confirmation_threshold', 'max_probability'):
@@ -98,8 +91,56 @@ def _profile(profile):
     for name in ('half_life_days', 'review_after_days'):
         _number(parameters[name], name, 0, 100000)
     _test_parameters(parameters, parameters)
+    return parameters
+
+
+def _profile(profile):
+    if not isinstance(profile, dict):
+        raise ValueError('profile must be an object')
+    if (type(profile.get('schema_version')) is not int
+            or profile['schema_version'] != 1
+            or profile.get('policy_version') != POLICY_VERSION
+            or profile.get('parameter_version') != PARAMETER_VERSION):
+        raise ValueError('unsupported learner profile or policy version')
+    parameters = _checked_parameters(profile.get('parameters'))
     if not isinstance(profile.get('events'), list):
         raise ValueError('profile events must be a list')
+    if 'calibration' in profile:
+        metadata = profile['calibration']
+        if (not isinstance(metadata, dict) or type(metadata.get('schema_version')) is not int
+                or metadata['schema_version'] != 1 or not isinstance(metadata.get('topics'), dict)):
+            raise ValueError('unsupported calibration metadata')
+        for topic, row in metadata['topics'].items():
+            if topic not in CONCEPTS or not isinstance(row, dict):
+                raise ValueError('invalid calibrated topic')
+            versions = {PARAMETER_VERSION}
+            if not isinstance(row.get('versions', []), list) or not isinstance(row.get('transitions', []), list):
+                raise ValueError('invalid parameter history')
+            for version in row.get('versions', []):
+                if (not isinstance(version, dict) or not isinstance(version.get('version'), str)
+                        or not version['version'] or version['version'] in versions):
+                    raise ValueError('invalid parameter version')
+                versions.add(version['version'])
+                model = _checked_parameters(version.get('parameters'))
+                if any(model[k] != parameters[k] for k in parameters if k not in ('slip', 'guess', 'learning_rate')):
+                    raise ValueError('calibration cannot change confirmation or fixed policy parameters')
+            if row.get('active_version', PARAMETER_VERSION) not in versions:
+                raise ValueError('unknown active parameter version')
+            previous_cursor, previous_at = 0, None
+            for switch in row.get('transitions', []):
+                if not isinstance(switch, dict) or switch.get('version') not in versions:
+                    raise ValueError('invalid parameter switch')
+                if not isinstance(switch.get('at'), str):
+                    raise ValueError('parameter switch must have a timestamp')
+                instant = _time(switch['at'])
+                cursor = switch.get('after_event_count')
+                q = switch.get('checkpoint_probability')
+                if (type(cursor) is not int or not previous_cursor <= cursor <= len(profile['events'])
+                        or isinstance(q, bool) or not isinstance(q, (int, float))
+                        or not math.isfinite(q) or not 0 <= q <= parameters['max_probability']
+                        or previous_at is not None and instant < previous_at):
+                    raise ValueError('invalid parameter checkpoint')
+                previous_cursor, previous_at = cursor, instant
     return parameters
 
 
@@ -139,6 +180,14 @@ def _event(evidence, parameters):
             or any(not isinstance(v, str) or not v for v in result['objectives'])):
         raise ValueError('objectives must be a list of nonempty strings')
     _test_parameters(result, parameters)
+    if 'bkt_parameters' in result:
+        frozen = _checked_parameters(result['bkt_parameters'])
+        if not isinstance(result.get('parameter_version'), str) or not result['parameter_version']:
+            raise ValueError('a frozen model must include parameter_version')
+        if any(name in result and result[name] != frozen[name] for name in ('slip', 'guess')):
+            raise ValueError('event slip and guess must match its frozen model')
+        if any(frozen[k] != parameters[k] for k in parameters if k not in ('slip', 'guess', 'learning_rate')):
+            raise ValueError('frozen event model cannot change fixed policy parameters')
     return result
 
 
@@ -191,7 +240,21 @@ def _next_review(probability, anchor, confirmed, parameters):
     return min(periodic, decay_due)
 
 
-def summarize(profile, at=None):
+def _late_arrivals(profile, topic):
+    excluded = {}
+    switches = profile.get('calibration', {}).get('topics', {}).get(topic, {}).get('transitions', [])
+    for index, event in enumerate(profile['events']):
+        if event['topic'] != topic:
+            continue
+        for switch in switches:
+            instant = _time(switch['at'])
+            if index >= switch['after_event_count'] and _time(event['at']) < instant:
+                excluded[event['id']] = instant
+                break
+    return excluded
+
+
+def _summarize(profile, at=None, predictions=None, override=None, transitions=True, only_topic=None):
     """Replay evidence into per-CONCEPTS policy decisions at the given time."""
     parameters = _profile(profile)
     now = _time(at)
@@ -202,6 +265,35 @@ def summarize(profile, at=None):
                     key=lambda event: _time(event['at']))
     output = {}
     for topic, concept in CONCEPTS.items():
+        if only_topic is not None and topic != only_topic:
+            continue
+        parameters = dict(override or profile['parameters'])
+        parameter_version = profile['parameter_version']
+        topic_events = [event for event in events if event['topic'] == topic]
+        late = _late_arrivals(profile, topic) if transitions else {}
+        topic_events = [dict(event, _late_excluded=True) if event['id'] in late else event
+                        for event in topic_events if event['id'] not in late or late[event['id']] <= now]
+        topic_metadata = profile.get('calibration', {}).get('topics', {}).get(topic, {})
+        if transitions and override is None:
+            switches = [switch for switch in topic_metadata.get('transitions', [])
+                        if _time(switch['at']) <= now]
+            versions = {v['version']: v for v in topic_metadata.get('versions', [])}
+            # The cursor puts a switch after its frozen evidence prefix even
+            # when the CLI timestamps several submissions in the same second.
+            indexed = {event['id']: index for index, event in enumerate(profile['events'])}
+            timeline, cursor = [], 0
+            for switch in switches:
+                segment = [event for event in topic_events
+                           if cursor <= indexed[event['id']] < switch['after_event_count']]
+                timeline.extend(sorted(segment, key=lambda event: _time(event['at'])))
+                model = (profile['parameters'] if switch['version'] == PARAMETER_VERSION
+                         else versions[switch['version']]['parameters'])
+                timeline.append({'_checkpoint': switch, '_parameters': model})
+                cursor = switch['after_event_count']
+            if switches:
+                timeline.extend(sorted((event for event in topic_events if indexed[event['id']] >= cursor),
+                                       key=lambda event: _time(event['at'])))
+                topic_events = timeline
         probability = parameters['q0']
         anchor = last_assessment = confirmed = None
         confirmed_probability = None
@@ -211,11 +303,41 @@ def summarize(profile, at=None):
         attempts, positive_days, negative_days = set(), set(), set()
         families, evidence_ids, scored_ids, observations = set(), [], [], []
         reasons = []
-        for event in events:
-            if event['topic'] != topic:
+        for event in topic_events:
+            if event.get('_late_excluded'):
+                evidence_ids.append(event['id'])
+                observations.append({'id': event['id'], 'reason': 'late_arrival_excluded'})
+                continue
+            if '_checkpoint' in event:
+                switch = event['_checkpoint']
+                switch_at = _time(switch['at'])
+                old_due = (confirmed is not None and (needs_reassessment
+                    or _decay(probability, anchor, switch_at, parameters) < parameters['confirmation_threshold']
+                    or switch_at >= _next_review(confirmed_probability, confirmed, confirmed, parameters)))
+                was_mastered = (confirmed is not None and not old_due and latest_independent_pass)
+                parameters = dict(event['_parameters'])
+                parameter_version = switch['version']
+                probability, anchor = switch['checkpoint_probability'], switch_at
+                # A changed model can revoke a decision, never independently
+                # create or restore a confirmation without a new independent pass.
+                if confirmed is not None and (not was_mastered
+                        or probability < parameters['confirmation_threshold']):
+                    needs_reassessment = True
                 continue
             evidence_ids.append(event['id'])
             instant = _time(event['at'])
+            if predictions is not None:
+                predicted_q = _decay(probability, anchor, instant, parameters)
+                predicted_s, predicted_g = _test_parameters(override or event, parameters)
+                predicted_due = (confirmed is not None and (needs_reassessment
+                    or predicted_q < parameters['confirmation_threshold']
+                    or instant >= _next_review(confirmed_probability, confirmed, confirmed, parameters)))
+                predictions[event['id']] = {
+                    'p_mastery': predicted_q,
+                    'p_success': predicted_q * (1 - predicted_s) + (1 - predicted_q) * predicted_g,
+                    'confirmed': confirmed is not None and not predicted_due and latest_independent_pass,
+                    'training_transition': trained,
+                }
             if confirmed is not None:
                 planned_review = _next_review(confirmed_probability, confirmed, confirmed, parameters)
                 if (instant >= planned_review
@@ -234,7 +356,8 @@ def summarize(profile, at=None):
                     reason = 'training_window_already_counted'
                 else:
                     probability = _decay(probability, anchor, instant, parameters)
-                    probability += (1 - probability) * parameters['learning_rate']
+                    learning_rate = (override or event.get('bkt_parameters', parameters))['learning_rate']
+                    probability += (1 - probability) * learning_rate
                     probability = min(probability, parameters['max_probability'])
                     anchor, trained = instant, True
                     scored_ids.append(event['id'])
@@ -260,7 +383,7 @@ def summarize(profile, at=None):
                             seen_days.add(day_key)
                             trained = False
                             probability = _decay(probability, anchor, instant, parameters)
-                            slip, guess = _test_parameters(event, parameters)
+                            slip, guess = _test_parameters(override or event, parameters)
                             probability = min(parameters['max_probability'],
                                 _posterior(probability, event['passed'], slip, guess))
                             anchor = instant
@@ -321,9 +444,33 @@ def summarize(profile, at=None):
             'needs_reassessment': needs_reassessment or due,
             'observations': observations, 'origin': 'bayesian_policy',
             'human_reviewed': False, 'policy_version': POLICY_VERSION,
-            'parameter_version': PARAMETER_VERSION, 'parameters': dict(parameters),
+            'parameter_version': parameter_version, 'parameters': dict(parameters),
         }
     return output
+
+
+def summarize(profile, at=None):
+    return _summarize(profile, at)
+
+
+def active_parameters(profile, topic, at=None):
+    from calibration import active_parameters as resolve
+    return resolve(profile, topic, at)
+
+
+def maybe_calibrate(profile, at=None):
+    from calibration import maybe_calibrate as update
+    return update(profile, at)
+
+
+def calibration_status(profile):
+    from calibration import calibration_status as status
+    return status(profile)
+
+
+def shadow_prediction(profile, topic, at=None):
+    from calibration import shadow_prediction as predict
+    return predict(profile, topic, at)
 
 
 def calibration_report(profile):
@@ -331,7 +478,8 @@ def calibration_report(profile):
 
     This is local operational monitoring, not a cross-learner validation study.
     Historical predictions are never reconstructed using later learner evidence.
-    No parameters are fitted, and no learning-effectiveness claim is produced.
+    This reporting function does not fit parameters; maybe_calibrate implements
+    the separate fitting loop. No learning-effectiveness claim is produced here.
     A topic/family/UTC-day contributes its first independent trial regardless of
     outcome, avoiding outcome-dependent selection of retries into the sample.
     """
@@ -438,6 +586,9 @@ def select_task(profile, catalog, topic='', at=None):
             raise ValueError('catalog version must be a positive integer')
         duration = _number(item.get('duration_seconds'), 'duration_seconds', 0, 100000)
         slip, guess = _test_parameters(item, parameters)
+        effective_model = active_parameters(profile, item['topic'], now)
+        if effective_model['version'] != PARAMETER_VERSION:
+            slip, guess = _test_parameters(effective_model['parameters'], parameters)
         kind = item.get('kind', 'assessment')
         if kind not in ('assessment', 'training'):
             raise ValueError('catalog kind must be assessment or training')

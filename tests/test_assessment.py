@@ -9,11 +9,15 @@ import subprocess
 import sys
 import time
 import unittest
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import test_lab as fixtures
 import assessment
 import assessment_tasks
 import tutor_chat
+import mastery
 
 APP = fixtures.APP
 
@@ -217,6 +221,110 @@ class AssessmentIntegration(unittest.TestCase):
         self.assertFalse(report['effectiveness_validated'])
         self.cli('assess', 'submit', cwd=self.workspace())
         self.assertEqual(json.loads(self.cli('profile', '--metrics', '--json')), report)
+
+    def test_calibration_status_is_automatic_and_cold_start_is_read_only(self):
+        path = Path(self.temp.name) / 'learner-profile.json'
+        report = json.loads(self.cli('profile', '--calibration', 'copy', '--json'))
+        self.assertEqual(set(report['topics']), {'copy'})
+        self.assertEqual(report['topics']['copy']['eligible_count'], 0)
+        self.assertEqual(report['topics']['copy']['status'], 'cold_start')
+        self.assertFalse(path.exists())
+        self.assertIn('无需手动启动', self.cli('profile', '--calibration', 'copy'))
+        self.cli('profile', '--calibration', '--metrics', ok=False)
+        self.assertFalse(path.exists())
+
+    def test_prediction_is_durable_before_grading_and_reused_after_crash(self):
+        self.cli('assess', 'copy')
+        self.solve_copy()
+        def crash_after_snapshot(*args, **kwargs):
+            item = self.attempt()
+            self.assertIn('model_snapshot', item)
+            self.assertAlmostEqual(item['model_snapshot']['prediction_before']['p_success'], .425)
+            raise OSError('isolated checker interruption')
+        with patch.object(assessment_tasks, 'evaluate', side_effect=crash_after_snapshot):
+            with self.assertRaisesRegex(OSError, 'isolated checker'):
+                assessment.submit(self.session, self.state())
+        snapshot = self.attempt()['model_snapshot']
+        self.assertEqual(self.attempt()['evidence'], [])
+        self.cli('assess', 'submit', cwd=self.workspace())
+        item = self.attempt()
+        event = item['evidence'][0]
+        self.assertEqual(item['model_snapshot'], snapshot)
+        self.assertEqual(event['prediction_before'], snapshot['prediction_before'])
+        self.assertEqual(event['bkt_parameters'], snapshot['bkt_parameters'])
+        self.assertEqual(event['parameter_version'], snapshot['parameter_version'])
+
+    def test_real_submission_activates_calibration_and_new_round_keeps_it(self):
+        # Authored test data in the isolated fixture, never real learner records.
+        outcomes = 'PFFPPPFFPPFPFPPFPFFPPPFPPPPPPP'
+        profile = mastery.new_profile()
+        tasks = [t for t in assessment_tasks.catalog() if t['topic'] == 'copy']
+        beginning = datetime.now(timezone.utc) - timedelta(days=29)
+        for index, outcome in enumerate(outcomes[:-1]):
+            at = beginning + timedelta(days=index)
+            task = tasks[index % len(tasks)]
+            row = mastery.summarize(profile, at)['copy']
+            mastery.record(profile, dict(
+                id='fixture:' + str(index), attempt_id='fixture:' + str(index),
+                session_id='isolated-calibration-fixture', topic='copy',
+                task_id=task['id'], family=task['family'], contract_version=1,
+                at=at.isoformat(), passed=outcome == 'P', independent=True,
+                observed=True, technical_error=False, kind='assessment',
+                parameter_version=mastery.PARAMETER_VERSION,
+                bkt_parameters=dict(mastery.DEFAULT_PARAMETERS),
+                slip=.05, guess=.20,
+                prediction_before=dict(p_mastery=row['p_mastery'], p_success=row['p_next_success'],
+                                       status=row['status'], parameter_version=mastery.PARAMETER_VERSION)))
+        frozen = deepcopy(profile['events'])
+        profile_path = Path(self.temp.name) / 'learner-profile.json'
+        assessment.atomic(profile_path, profile)
+        self.cli('assess', 'copy')
+        self.solve_copy()
+        self.cli('assess', 'submit', cwd=self.workspace())
+        calibrated = json.loads(profile_path.read_text())
+        self.assertEqual(calibrated['events'][:29], frozen)
+        status = json.loads(self.cli('profile', '--calibration', 'copy', '--json'))['topics']['copy']
+        version = status['active_version']
+        self.assertNotEqual(version, mastery.PARAMETER_VERSION)
+        self.assertEqual(status['eligible_count'], 30)
+        self.assertEqual(status['parameters']['confirmation_threshold'], .95)
+        self.assertEqual(self.attempt()['evidence'][0]['parameter_version'], mastery.PARAMETER_VERSION)
+        self.cli('assess', 'copy')
+        self.solve_copy()
+        with patch.object(assessment_tasks, 'evaluate', side_effect=OSError('snapshot interruption')):
+            with self.assertRaises(OSError):
+                assessment.submit(self.session, self.state())
+        frozen_prediction = deepcopy(self.attempt()['model_snapshot']['prediction_before'])
+        self.assertEqual(frozen_prediction['shadow_previous']['version'], mastery.PARAMETER_VERSION)
+        # Another round can add evidence during a retry. Both predictions must
+        # still compare the same earlier information, not give the shadow hindsight.
+        with assessment.profile_store(self.session) as shared:
+            mastery.record(shared, dict(id='fixture:intervening-training',
+                topic='copy', task_id='fixture-training', family='guided', at=assessment.stamp(),
+                passed=True, independent=False, observed=True, technical_error=False,
+                kind='training', parameter_version=version, bkt_parameters=status['parameters']))
+        self.cli('assess', 'submit', cwd=self.workspace())
+        event = self.attempt()['evidence'][0]
+        self.assertEqual(event['prediction_before'], frozen_prediction)
+        self.assertEqual(event['parameter_version'], version)
+        self.assertEqual(event['bkt_parameters'], status['parameters'])
+        self.assertEqual(event['slip'], status['parameters']['slip'])
+        self.assertEqual(event['guess'], status['parameters']['guess'])
+        predicted = event['prediction_before']['p_mastery'] * (1 - event['slip'])
+        predicted += (1 - event['prediction_before']['p_mastery']) * event['guess']
+        self.assertAlmostEqual(event['prediction_before']['p_success'], predicted)
+        self.assertNotEqual((event['slip'], event['guess']), (.05, .20))
+        model_count = len(json.loads(profile_path.read_text())['calibration']['topics']['copy']['versions'])
+        self.cli('profile', '--calibration')
+        self.assertEqual(len(json.loads(profile_path.read_text())['calibration']['topics']['copy']['versions']), model_count)
+        created = subprocess.run([sys.executable, str(APP / 'orbit.py'), 'prepare', '--new', '--scene', 'ocean'],
+                                 env=self.env, capture_output=True, text=True, check=True)
+        self.session = Path(created.stdout.strip())
+        self.root = self.session / 'station'
+        self.env['ORBIT_HOME'] = str(self.session)
+        after = json.loads(self.cli('profile', '--calibration', 'copy', '--json'))['topics']['copy']
+        self.assertEqual(after['active_version'], version)
+        self.assertEqual(json.loads(profile_path.read_text())['events'][:29], frozen)
 
     def test_automatic_route_starts_at_prerequisite(self):
         self.cli('next')

@@ -29,7 +29,7 @@ REASONS = {
 
 
 def stamp():
-    return datetime.now(timezone.utc).isoformat(timespec='seconds')
+    return datetime.now(timezone.utc).isoformat(timespec='microseconds')
 
 
 def safe(root, relative):
@@ -128,11 +128,14 @@ def update_profile(session, state, evidence=None):
             mastery.record(profile, record)
         if evidence:
             mastery.record(profile, evidence)
+        mastery.maybe_calibrate(profile)
         summary = mastery.summarize(profile)
+        calibration = mastery.calibration_status(profile)
         has_evidence = bool(profile['events'])
     if has_evidence or 'learner_profile' in state:
         state['learner_profile'] = dict(policy_version=mastery.POLICY_VERSION,
-                                        updated_at=stamp(), topics=summary)
+                                        updated_at=stamp(), topics=summary,
+                                        auto_calibration=calibration)
     return summary
 
 
@@ -164,7 +167,7 @@ def profile_view(session, state, topic='', as_json=False):
                                  + ('通过' if event['passed'] else '尚未通过') + ' · '
                                  + titles.get(event['family'], '九关练习'))
     lines += ['', 'lab next 自动安排下一步；lab assess 知识点 开始达标短测。',
-              '当前采用版本化初始参数；系统确认用于教学安排，真实测评记录用于持续校准。']
+              '系统根据后续测评自动校准；lab profile --calibration 查看调整情况。']
     return '\n'.join(lines)
 
 
@@ -172,6 +175,7 @@ def metrics_view(session, state, as_json=False):
     update_profile(session, state)
     with profile_store(session) as profile:
         report = mastery.calibration_report(profile)
+        report['auto_calibration'] = mastery.calibration_status(profile)
     if as_json:
         return json.dumps(report, ensure_ascii=False, indent=2)
     lines = ['本机预测质量记录', f"可用独立测评：{report['sample_count']} 次"]
@@ -184,7 +188,56 @@ def metrics_view(session, state, as_json=False):
         lines.append(f"确认掌握后的独立复测：{followups['count']} 次，通过率 {followups['pass_rate']:.1%}")
     else:
         lines.append('确认掌握后的独立复测：尚无记录。')
-    lines.append('这里统计本机实际记录；产品效果验收另用隔离学生与模板的数据集。')
+    calibrated = sum(row['active_version'] != mastery.PARAMETER_VERSION
+                     for row in report['auto_calibration']['topics'].values())
+    lines.append(f'自动校准：{calibrated} 个知识点正在使用调整后的参数。lab profile --calibration 查看详情。')
+    return '\n'.join(lines)
+
+
+def calibration_view(session, state, topic='', as_json=False):
+    if topic and topic not in CONCEPTS:
+        raise ValueError('未知知识点；用 lab profile 查看知识点编号。')
+    update_profile(session, state)
+    with profile_store(session) as profile:
+        report = mastery.calibration_status(profile)
+    if topic:
+        report['topics'] = {topic: report['topics'][topic]}
+    if as_json:
+        return json.dumps(report, ensure_ascii=False, indent=2)
+    labels = {'cold_start': '积累测评', 'retained': '沿用当前参数',
+              'activated': '已自动调整', 'monitoring': '持续观察调整效果',
+              'rolled_back': '已恢复上一版参数'}
+    reasons = {
+        'insufficient_samples': '继续积累独立测评，达到样本要求后自动检验。',
+        'insufficient_structural_families': '还需要覆盖更多不同结构的短测。',
+        'insufficient_passes_or_failures': '记录需要包含足够的通过和尚未通过结果。',
+        'insufficient_training_outcome_diversity': '较早的记录还需要更多不同结果。',
+        'insufficient_validation_outcome_diversity': '后续检验记录还需要更多不同结果。',
+        'forward_validation_passed': '候选参数在后续记录上达到改进要求，已启用。',
+        'no_training_improvement': '候选参数没有改善预测，继续使用当前参数。',
+        'new_false_confirmations': '候选参数增加了错误确认，已保留当前参数。',
+        'insufficient_validation_improvement': '后续记录上的改善未达到要求，继续积累记录。',
+        'waiting_for_fresh_validation': '等待新的测评记录，避免重复使用同一批检验结果。',
+        'online_regression': '调整后的预测持续变差，已自动恢复上一版。',
+        'online_block_passed': '最近一组新测评通过监测，继续观察。',
+        'replay_event_limit': '记录已达到本版自动拟合的计算上限，保留当前参数。',
+        'cpu_budget_exceeded': '本次拟合达到计算时限，继续使用当前参数并等待新测评。',
+    }
+    lines = ['学习判断自动校准', '完成短测后自动检查，无需手动启动。', '']
+    for key, row in report['topics'].items():
+        lines.append(f"{key:14} {CONCEPTS[key]['title']} · {labels.get(row['status'], '积累测评')}")
+        lines.append(f"  可用独立测评 {row['eligible_count']} 次；当前参数 {row['active_version']}")
+        if row.get('reason') in reasons:
+            lines.append('  ' + reasons[row['reason']])
+        if row.get('last_run'):
+            run = row['last_run']
+            lines.append(f"  最近验证误差（Brier）：调整前 {run['baseline_validation']['brier_score']:.4f}"
+                         f" → 候选 {run['candidate_validation']['brier_score']:.4f}")
+        monitor = row.get('monitor')
+        if monitor:
+            lines.append(f"  调整后的新测评：{monitor.get('sample_count', 0)} 次")
+    lines += ['', '使用较早记录拟合，用后续记录检验；改善达标后启用，持续变差时自动恢复。',
+              '历史作答、当时的预测和参数版本保留。']
     return '\n'.join(lines)
 
 
@@ -400,6 +453,30 @@ def submit(session, state, answer=''):
         return result_text(item), 0
     if len(answer) > 1000:
         raise ValueError('短测答案过长，请只提交题面要求的内容。')
+    # Freeze the prediction before the checker observes the answer. A crash or
+    # technical retry uses the same first-submission snapshot, never hindsight.
+    if not item.get('model_snapshot') or item['evidence']:
+        with profile_store(session) as profile:
+            frozen_at = stamp()
+            previous = mastery.summarize(profile, frozen_at)[item['task']['topic']]
+            model = mastery.active_parameters(profile, item['task']['topic'], frozen_at)
+            parameters = model['parameters']
+            probability = previous['p_mastery']
+            snapshot = dict(parameter_version=model['version'], bkt_parameters=parameters,
+                            frozen_at=frozen_at, prediction_before=dict(
+                                p_mastery=probability,
+                                p_success=probability * (1 - parameters['slip'])
+                                          + (1 - probability) * parameters['guess'],
+                                status=previous['status'], policy_version=mastery.POLICY_VERSION,
+                                parameter_version=model['version'],
+                                frozen_at=frozen_at, evidence_count=len(profile['events']),
+                                shadow_previous=mastery.shadow_prediction(profile, item['task']['topic'], frozen_at)))
+        if not item['evidence']:
+            item['model_snapshot'] = snapshot
+            item['task']['evaluation_model'] = dict(version=model['version'], parameters=parameters)
+            save_attempt(session, item)
+    else:
+        snapshot = item['model_snapshot']
     result = assessment_tasks.evaluate(item['task'], workdir(session, item), answer, cwd=Path.cwd())
     commands = {o['command'] for o in item['observations'] if o['semantic']
                 and (not result['passed'] or o['exit_code'] == 0)}
@@ -412,23 +489,17 @@ def submit(session, state, answer=''):
         save_attempt(session, item)
         return result_text(item), 1
     kind = 'assessment' if item['mode'] == 'assessment' and not item['help'] else 'training'
-    with profile_store(session) as profile:
-        previous = mastery.summarize(profile)[item['task']['topic']]
-        probability = previous['p_mastery']
-        prediction = dict(p_mastery=probability,
-                          p_success=probability * (1 - item['task'].get('slip', .05))
-                          + (1 - probability) * item['task'].get('guess', .2),
-                          status=previous['status'], policy_version=mastery.POLICY_VERSION,
-                          parameter_version=profile['parameter_version'])
+    parameters = snapshot['bkt_parameters']
     evidence = dict(id='assessment:' + item['id'], attempt_id=item['id'],
                     session_id=state['id'], topic=item['task']['topic'],
                     task_id=item['task']['id'], family=item['task']['family'],
                     contract_version=item['task']['version'], at=stamp(),
                     passed=bool(result['passed']), independent=independent,
                     kind=kind, observed=observed, technical_error=False,
-                    slip=item['task'].get('slip', .05), guess=item['task'].get('guess', .2),
+                    slip=parameters['slip'], guess=parameters['guess'],
+                    parameter_version=snapshot['parameter_version'], bkt_parameters=parameters,
                     objectives=item['task'].get('objectives', []), checks=result['checks'],
-                    prediction_before=prediction,
+                    prediction_before=snapshot['prediction_before'],
                     help=list(item['help']), observations=list(item['observations']),
                     answer=answer)
     if not item['evidence']:
@@ -494,12 +565,17 @@ def story_pass(session, state, phase):
         for topic in PHASE_CONCEPTS[phase]:
             if not any(o['command'] in STORY_COMMANDS[topic] for o in rows):
                 continue
+            ident = f"story:{state['id']}:{phase}:{topic}"
+            if any(e['id'] == ident for e in profile['events']):
+                continue
+            model = mastery.active_parameters(profile, topic)
             evidence = dict(id=f"story:{state['id']}:{phase}:{topic}",
                             attempt_id=f"story:{state['id']}:{phase}:{topic}",
                             session_id=state['id'], topic=topic, task_id='story-' + str(phase),
                             family='story-' + str(phase), contract_version=1,
-                            at=state['events'][-1]['at'], passed=True, independent=False,
-                            kind='training', observed=True, technical_error=False)
+                            at=stamp(), source_at=state['events'][-1]['at'], passed=True, independent=False,
+                            kind='training', observed=True, technical_error=False,
+                            parameter_version=model['version'], bkt_parameters=model['parameters'])
             changed = mastery.record(profile, evidence) or changed
     if changed:
         update_profile(session, state)
