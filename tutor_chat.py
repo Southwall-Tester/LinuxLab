@@ -48,7 +48,7 @@ def phase(state):
 
 
 def context_key(state):
-    return hashlib.sha256(json.dumps([phase(state), scenes.get(state)], sort_keys=True,
+    return hashlib.sha256(json.dumps([phase(state), scenes.get(state), state.get('assessment_context')], sort_keys=True,
                                     ensure_ascii=False).encode()).hexdigest()
 
 
@@ -74,6 +74,14 @@ def command_reference(state, question, turns):
 def context(state, api_key='', question='', turns=()):
     n = phase(state)
     keys = PHASE_CONCEPTS[n] if n <= 9 else list(CONCEPTS)
+    short = state.get('assessment_context')
+    if short:
+        key = short['topic']
+        return dict(phase=n, completed=False, assessment=True,
+                    task=short['prompt'], tools=CONCEPTS[key]['note'],
+                    concepts={key: {'title': CONCEPTS[key]['title'], 'explanation': CONCEPTS[key]['explanation']}},
+                    command_notes=command_reference(state, question, turns),
+                    limits='当前是独立短测的答疑，收到帮助后转为指导练习。只有公开题面，没有答案或文件内容。')
     # Current student-facing task only: no files, full state or future briefs.
     return dict(phase=n, completed=n == 10,
                 task=ai_tutor.redact(brief(n, state), state, api_key) if n <= 9 else '九关完成后的概念复盘。',
@@ -112,6 +120,9 @@ def local_answer(state, question):
     """A labeled lookup fallback, never pretend a live model answered."""
     n = phase(state)
     keys = PHASE_CONCEPTS[n] if n <= 9 else list(CONCEPTS)
+    if state.get('assessment_context'):
+        key = state['assessment_context']['topic']
+        return '短测本地讲解 · ' + CONCEPTS[key]['title'] + '\n' + CONCEPTS[key]['explanation']
     selected = [k for k, c in CONCEPTS.items() if c['note'] in question.lower() or c['title'] in question]
     lines = ['当前是本地资料模式，不能理解连续追问。可用 lab notes 命令名查看详细笔记。']
     if n == 4:
@@ -207,7 +218,16 @@ def respond(session, question, offline=False):
         current['turns'].append(turn)
         current['turns'] = current['turns'][-100:]
         # Conservatively record concrete help, not a model-asserted help level.
-        if n <= 9:
+        if latest.get('assessment_context'):
+            import assessment
+            assessment.help_requested(session, latest, 'chat')
+            item = assessment.active(session, latest)
+            item.setdefault('dialogue', []).append(dict(turn_id=turn['id'], learner=turn['user'],
+                                                        assistant=turn['assistant'], analysis=analysis,
+                                                        requested_at=requested_at, answered_at=turn['at']))
+            item['dialogue'] = item['dialogue'][-100:]
+            assessment.save_attempt(session, item)
+        elif n <= 9:
             latest['events'].append(dict(at=turn['at'], phase=n, result='tutor', level=3,
                                          source='ai' if source == 'model_inference' else 'local',
                                          channel='chat', chat_turn_id=turn['id'], concept=PHASE_CONCEPTS[n][0],

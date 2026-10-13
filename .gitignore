@@ -28,4 +28,8 @@ learning-notebook.md
 tutor-chat.json
 tutor-chat.lock
 tracking.enabled
+learner-profile.json
+learner-profile.lock
+assessment-work/
+assessments/
 scenes/generated-*.json

@@ -30,7 +30,11 @@ def main():
             assert hashlib.sha256(z.read('linuxlab/' + name)).hexdigest() == digest, name
         assert z.read('linuxlab/AGENTS.md') == student_rules
         assert z.read('linuxlab/docs/STUDENT-AGENTS.md') == student_rules
-        assert not any('ai.local' in name or 'learning-notebook' in name for name in z.namelist())
+        assert not any(any(private in name for private in (
+            'ai.local', 'learning-notebook', 'learner-profile', 'assessment-work/'))
+            for name in z.namelist())
+        assert all('linuxlab/' + name in z.namelist() for name in (
+            'mastery.py', 'assessment_tasks.py', 'assessment.py', 'docs/MASTERY.md'))
         example = json.loads(z.read('linuxlab/ai.example.json'))
         assert example['enabled'] is False and example['api_key'] == ''
     start = time.monotonic()
@@ -57,6 +61,9 @@ def main():
         sys.path.insert(0, str(app))
         __import__('orbit')
         __import__('tutor_chat')
+        __import__('mastery')
+        __import__('assessment_tasks')
+        __import__('assessment')
         spec = importlib.util.spec_from_file_location('handout_tests', ROOT / 'tests/test_lab.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
@@ -115,6 +122,15 @@ def main():
         suite.addTests(test_chat.ChatIntegration(name) for name in chat_names)
         import test_chat_evidence
         suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(test_chat_evidence.ChatEvidenceTests))
+        import test_assessment
+        test_assessment.APP = app
+        assessment_names = ['test_profile_three_variants_resume_and_new_round',
+                            'test_help_tracking_and_first_submission',
+                            'test_active_chat_uses_short_task_without_story_evidence',
+                            'test_profile_symlink_and_attempt_symlink_rejected',
+                            'test_prediction_metrics_preserve_prior_predictions',
+                            'test_real_terminal_short_assessment']
+        suite.addTests(test_assessment.AssessmentIntegration(name) for name in assessment_names)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
         assert result.wasSuccessful(), 'Packaged artifact failed validation'
     record = {'package_sha256': manifest['sha256'], 'file_hashes_verified': len(manifest['files']),
@@ -125,6 +141,7 @@ def main():
               'packaged_tracking_tests': tracking_names,
               'packaged_branding_tests': branding_names,
               'packaged_chat_tests': chat_names,
+              'packaged_assessment_tests': assessment_names,
               'elapsed_seconds': round(time.monotonic() - start, 3),
               'platform': sys.platform, 'python': sys.version.split()[0]}
     (ROOT / 'dist/validation.json').write_text(json.dumps(record, indent=2) + '\n')

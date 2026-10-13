@@ -168,6 +168,10 @@ lab tutor ["问题"]  针对最近失败逐级求助；--offline 离线；--topi
 lab chat            连续 AI 答疑，直接输入问题与追问；/exit 或 Ctrl+C 返回 Bash
 lab notebook        查看按本局经历整理的学习手册
 lab review          查看复习清单；lab review 知识点 看题，再加 A/B/C 作答
+lab profile         跨周目能力画像；加知识点看依据，加 --json 导出
+lab next            按画像安排下一步，自动选择学习、达标短测或复习
+lab assess [知识点] 独立变式短测；show 看题，hint 求助，submit [答案] 提交
+lab assess abandon  保存本题现场并结束；九关进度保持原样
 lab ai init         创建本地 API 配置；lab ai status 只检查格式，不发送请求
 lab tracking on/off  开关本地操作记录（新周目默认开启，可查看具体输入问题）
 lab activity         查看最近操作记录；不记录参数、输出或按键

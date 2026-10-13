@@ -35,7 +35,7 @@ _orbit_observe_prompt() {
     if [[ -n "$orbit_line" && "$orbit_line" != "${_orbit_last_observed_line:-}" ]]; then
       _orbit_last_observed_line="$orbit_line"
       shopt -q dotglob && orbit_dotglob=1
-      if [[ "$orbit_line" =~ ^[[:space:]]*[0-9]+[[:space:]]+([a-zA-Z0-9_.-]+) ]]; then
+      if [[ "$orbit_line" =~ ^[[:space:]]*[0-9]+[[:space:]]+([a-zA-Z0-9_./-]+) ]]; then
         orbit_kind="$(builtin type -t -- "${BASH_REMATCH[1]}" 2>/dev/null)"
         orbit_kind="${orbit_kind:-missing}"
       fi

@@ -31,6 +31,7 @@ import layout
 import scene_generator
 import tasks
 import error_patterns
+import assessment
 
 APP = Path(__file__).resolve().parent
 VERSION = '2.0.0'
@@ -555,6 +556,7 @@ def show_status(s):
         label = '●' if i in s['done'] else '▶' if i == len(s['done']) + 1 else '○'
         print(f'  {label} {i:02}  {title}' + (f'  / {reward}' if i in s['done'] else ''))
     print()
+    print(assessment.brief_profile(s))
 
 
 def report(session, s):
@@ -565,6 +567,7 @@ def report(session, s):
            'result': s.get('flag'),
            'archive_sha256': s.get('archive_sha256'),
            'learning': s.get('learning', {}),
+           'learner_profile': s.get('learner_profile', {}),
            'scene': s.get('scene', 'space'),
            'scene_title': scenes.get(s)['title'], 'task_schema': 'linux-nine-v1',
            'course_id': s.get('course_id', 'linux-foundations'),
@@ -580,7 +583,7 @@ def save_notebook(session, s):
     path = safe_path(session, 'learning-notebook.md')
     temp = safe_path(session, 'learning-notebook.' + secrets.token_hex(4) + '.tmp')
     try:
-        temp.write_text(learning.notebook(s), encoding='utf-8')
+        temp.write_text(learning.notebook(s) + assessment.notebook_section(s), encoding='utf-8')
         temp.replace(path)
     finally:
         if temp.exists():
@@ -713,6 +716,10 @@ def check(session, s, answer):
         s['done'].append(n)
         s['events'].append({'at': now(), 'phase': n, 'result': 'passed'})
         learning.record_check(s, n, True)
+        try:
+            assessment.story_pass(session, s, n)
+        except (OSError, ValueError) as exc:
+            print('本关已通过；画像更新暂未完成：' + str(exc), file=sys.stderr)
         print(f'\n[通过 {n:02}/09] ' + scenes.get(s)['rewards'][n-1])
         print('本关知识：' + REFLECTIONS[n-1])
         if n == 9:
@@ -805,9 +812,54 @@ def show_notes(topic):
 def run_command(args, session, s):
     cmd = args.command
     n = len(s['done']) + 1
+    if cmd in ('profile', 'next', 'assess', 'mission', 'status', 'report', 'notebook'):
+        assessment.update_profile(session, s)
+    current = assessment.pending(session, s)
+    if cmd == 'profile':
+        require(not args.metrics or not args.topic, '整体预测指标请用 lab profile --metrics，不附知识点。')
+        print(assessment.metrics_view(session, s, args.json) if args.metrics else
+              assessment.profile_view(session, s, args.topic, args.json))
+        return 0
+    if cmd == 'next':
+        print(assessment.start(session, s, args.topic, adaptive=True))
+        return 0
+    if cmd == 'assess':
+        action = args.action
+        require(not args.answer or action == 'submit', '只有 lab assess submit 后面需要答案。')
+        if action == 'submit':
+            message, code = assessment.submit(session, s, ' '.join(args.answer))
+            print(message)
+            return code
+        if action == 'show':
+            item = assessment.active(session, s)
+            require(item is not None, '当前没有短测。用 lab assess 知识点 开始。')
+            print(assessment.show(session, item))
+        elif action == 'hint':
+            print(assessment.teach(session, s))
+        elif action == 'abandon':
+            print(assessment.abandon(session, s))
+        else:
+            print(assessment.start(session, s, action))
+        return 0
+    if current and cmd in ('hint', 'tutor', 'learn'):
+        print(assessment.teach(session, s))
+        return 0
+    if current and cmd == 'check' and assessment.in_workdir(session, s):
+        message, code = assessment.submit(session, s, args.answer)
+        print(message)
+        return code
+    if current and cmd == 'repair' and assessment.in_workdir(session, s):
+        raise ValueError('短测现场已保留。用 lab assess abandon 结束本题，再用 lab next 开始新练习。')
+    if cmd == 'notes':
+        assessment.help_requested(session, s, 'notes', args.topic)
+    if cmd == 'review' and args.topic:
+        assessment.help_requested(session, s, 'review', args.topic)
     if cmd in ['mission', 'status']:
         show_status(s)
         if cmd == 'mission':
+            if current:
+                print(assessment.show(session, current))
+                return 0
             if n <= 9:
                 print('本关工具：' + SKILLS[n-1] + '\n\n' + brief(n, s))
                 print('\n提示：lab hint 逐级求助；lab tutor 针对问题讲解；lab chat 连续答疑；lab notebook 查看学习手册。')
@@ -888,6 +940,8 @@ def run_command(args, session, s):
             elif marker.exists():
                 marker.unlink()
             s['tracking_enabled'] = enabled
+            if not enabled:
+                assessment.tracking_off(session, s)
         print('本平台操作记录：' + ('已开启' if s.get('tracking_enabled') else '已关闭'))
         print('新周目默认开启；仅记录本实验内的有限操作特征及经过筛选的错误命令词、选项和路径片段。')
         print('不保存完整命令、原生输出、按键或停顿；本地记录不会逐条自动上传。lab tracking off 可关闭。')
@@ -897,7 +951,7 @@ def run_command(args, session, s):
         print(scenes.choose(s, args.name))
     elif cmd == 'notebook':
         print('本平台个人学习手册；生成的文件也可用 cat 或 less 加文件路径阅读。')
-        print(render_markdown(learning.notebook(s)))
+        print(render_markdown(learning.notebook(s) + assessment.notebook_section(s)))
         print('手册文件：' + str(save_notebook(session, s)))
     elif cmd == 'review':
         print('本平台复习功能（不是 Linux 通用命令）')
@@ -944,6 +998,8 @@ def main():
                 cwd = Path(os.environ.get('ORBIT_OBSERVED_CWD', str(Path.cwd())))
                 activity.record(s, session, line, int(argv[1]), cwd, argv[2] == '1',
                                 os.environ.get('ORBIT_OBSERVED_COMMAND_KIND'))
+                assessment.observe(session, s, line, int(argv[1]), cwd,
+                                   os.environ.get('ORBIT_OBSERVED_COMMAND_KIND'))
                 atomic_json(session / 'state.json', s)
                 pliac_bridge.publish_safely(s)
         except (LabError, OSError, ValueError, KeyError):
@@ -990,6 +1046,12 @@ def main():
     p.add_argument('--offline', action='store_true')
     p = sub.add_parser('review')
     p.add_argument('topic', nargs='?', default=''); p.add_argument('answer', nargs='?', default='')
+    p = sub.add_parser('profile')
+    p.add_argument('topic', nargs='?', default=''); p.add_argument('--json', action='store_true')
+    p.add_argument('--metrics', action='store_true')
+    p = sub.add_parser('next'); p.add_argument('topic', nargs='?', default='')
+    p = sub.add_parser('assess'); p.add_argument('action', nargs='?', default='')
+    p.add_argument('answer', nargs='*')
     p = sub.add_parser('stop'); p.add_argument('--quiet', action='store_true')
     args = parser.parse_args(argv)
     args.command = args.command or 'mission'
